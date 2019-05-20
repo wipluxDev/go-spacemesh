@@ -15,6 +15,7 @@ import yaml
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 from pytest_testconfig import config as testconfig
+import random
 
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
@@ -274,6 +275,26 @@ def add_single_client(deployment_id, container_specs):
     print("Add new client: {0}".format(client_name))
     return client_name
 
+
+def get_conf(bs_info, setup_poet, setup_oracle, args=None):
+    client_args = {} if 'args' not in testconfig['client'] else testconfig['client']['args']
+
+    if args is not None:
+        for arg in args:
+            client_args[arg] = args[arg]
+
+    cspec = ContainerSpec(cname='client',
+                          cimage=testconfig['client']['image'],
+                          centry=[testconfig['client']['command']])
+    cspec.append_args(bootnodes="{0}:{1}/{2}".format(bs_info['pod_ip'], BOOTSTRAP_PORT, bs_info['key']),
+                      oracle_server='http://{0}:{1}'.format(setup_oracle, ORACLE_SERVER_PORT),
+                      poet_server='{0}:{1}'.format(setup_poet, POET_SERVER_PORT),
+                      genesis_time=GENESIS_TIME.isoformat('T', 'seconds'),
+                      **client_args)
+
+
+    return cspec
+
 # The following fixture should not be used if you wish to add many clients during test.
 # Instead you should call add_single_client directly
 @pytest.fixture()
@@ -288,17 +309,7 @@ def add_client(request, setup_oracle, setup_poet, setup_bootstrap, setup_clients
 
         bs_info = setup_bootstrap.pods[0]
 
-        client_args = {} if 'args' not in testconfig['client'] else testconfig['client']['args']
-
-        cspec = ContainerSpec(cname='client',
-                              cimage=testconfig['client']['image'],
-                              centry=[testconfig['client']['command']])
-
-        cspec.append_args(bootnodes="{0}:{1}/{2}".format(bs_info['pod_ip'], BOOTSTRAP_PORT, bs_info['key']),
-                          oracle_server='http://{0}:{1}'.format(setup_oracle, ORACLE_SERVER_PORT),
-                          poet_server='{0}:{1}'.format(setup_poet, POET_SERVER_PORT),
-                          genesis_time=GENESIS_TIME.isoformat('T', 'seconds'),
-                          **client_args)
+        cspec = get_conf(bs_info, setup_poet, setup_oracle)
 
         client_name = add_single_client(setup_bootstrap.deployment_id, cspec)
         return client_name
@@ -437,6 +448,24 @@ def test_add_client(add_client):
     assert len(hits) == 1, "Could not find new Client bootstrap message"
 
 
+def test_late_bootstraps(setup_poet, setup_oracle, setup_bootstrap, setup_clients):
+    # Sleep a while before checking the node is bootstarped
+    TEST_NUM = 10
+
+    testnames = list()
+
+    for i in range(TEST_NUM):
+        client = add_single_client(setup_bootstrap.deployment_id, get_conf(setup_bootstrap.pods[0], setup_poet, setup_oracle))
+        testnames.append((client, datetime.now()))
+        time.sleep(5)
+
+    time.sleep(TEST_NUM)
+
+    fields = {'M': 'discovery_bootstrap'}
+    for i in testnames:
+        hits = query_message(current_index, testconfig['namespace'], i[0], fields, False)
+        assert len(hits) == 1, "Could not find new Client bootstrap message"
+
 def test_gossip(setup_clients, add_curl):
     fields = {'M':'new_gossip_message', 'protocol': 'api_test_gossip'}
     # *note*: this already waits for bootstrap so we can send the msg right away.
@@ -460,6 +489,49 @@ def test_gossip(setup_clients, add_curl):
     peers_for_gossip = query_message(current_index, testconfig['namespace'], setup_clients.deployment_name, fields, True)
     assert len(setup_clients.pods) == len(set(peers_for_gossip))
 
+
+def test_many_gossip_messages(setup_clients, add_curl):
+    fields = {'M':'new_gossip_message', 'protocol': 'api_test_gossip'}
+    # *note*: this already waits for bootstrap so we can send the msg right away.
+    # send message to client via rpc
+    TEST_MESSAGES = 10
+    for i in range(TEST_MESSAGES):
+        rnd = random.randint(0, len(setup_clients.pods)-1)
+        client_ip = setup_clients.pods[rnd]['pod_ip']
+        podname = setup_clients.pods[rnd]['name']
+        print("Sending gossip from client ip: {0}/{1}".format(podname, client_ip))
+
+        # todo: take out broadcast and rpcs to helper methods.
+        api = 'v1/broadcast'
+        data = '{"data":"foo' + str(i) + '"}'
+        out = api_call(client_ip, data, api, testconfig['namespace'])
+        assert '{"value":"ok"}' in out.decode("utf-8")
+
+        # Need to sleep for a while in order to enable the propagation of the gossip message - 0.5 sec for each node
+        # TODO: check frequently before timeout so we might be able to finish earlier.
+        gossip_propagation_sleep = 3 # currently we expect short propagation times.
+        print('sleep for {0} sec to enable gossip propagation'.format(gossip_propagation_sleep))
+        time.sleep(gossip_propagation_sleep)
+
+        peers_for_gossip = query_message(current_index, testconfig['namespace'], setup_clients.deployment_name, fields, True)
+        assert len(setup_clients.pods)*(i+1) == len(peers_for_gossip)
+
+
+# # This tests tests gossiping with a node that has a certian number of neighbors.
+# def test_gossip_neighbors(setup_poet, setup_oracle, setup_bootstrap, setup_clients, add_curl):
+#     tests  = [{ 'amount': 1, 'randcon': 3, 'max-inbound': 0 }]
+#
+#     testnames = list()
+#
+#     for i in range(TEST_NUM):
+#         client = add_single_client(setup_bootstrap.deployment_id,
+#                                    get_conf(setup_bootstrap.pods[0], # bsnode
+#                                             setup_poet, # poet
+#                                             setup_oracle, # oracle
+#                                    {'randcon': '1', 'max-inbound': 2}))
+#         # TODO: target-outbound should be used instead of randcon
+#         testnames.append((client, datetime.now()))
+#
 
 def test_transaction(setup_clients, add_curl, wait_genesis):
     # choose client to run on

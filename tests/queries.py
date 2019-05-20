@@ -168,5 +168,46 @@ def get_atx_per_node(deployment):
     nodes = parseAtx(atx_logs)
 
     return nodes
-
-
+#
+#
+# def progressbar(count, prefix="", size=60, file=sys.stdout):
+#
+#     def show(j):
+#         x = int(size*j/count)
+#         file.write("%s[%s%s] %i/%i\r" % (prefix, "#"*x, "."*(size-x), j, count))
+#         file.flush()
+#     show(0)
+#     i = 0
+#     while i < count:
+#         time.sleep(1)
+#         show(i+1)
+#         i+=1
+#     file.write("\n")
+#     file.flush()
+#
+#
+# def wait_period(forwhat, td):
+#     wait = 0
+#     if isinstance(td, timedelta):
+#         wait = td.total_seconds()
+#     elif isinstance(td, int) or isinstance(td, float):
+#         wait = td
+#     progressbar(wait, forwhat)
+#
+#
+# def check_and_wait(func, timeout):
+#     pbar = '''-\\|/-'''
+#
+#     wait = 0
+#
+#     i = 0
+#     pi = 0
+#     while i < wait:
+#         res = func()
+#         if not res:
+#             pi = pi + 1 if pi < len(pbar)-1 else 0
+#             print(pbar[pi], end="\r")
+#             time.sleep(1)
+#             i += 1
+#         if timeout and i > timeout:
+#             raise Exception("timeout waiting")
