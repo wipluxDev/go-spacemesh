@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const saveResults = false
+const saveResults = true
 
 type NodeTestInstance interface {
 	Service
@@ -86,10 +86,10 @@ func (its *IntegrationTestSuite) SetupSuite() {
 		swarm[i] = createP2pInstance(its.T(), cfg)
 		i := i
 		//	wg.Add(1)
+		time.Sleep(50 * time.Millisecond)
 		go func() {
 			// we add a timeout before starting to reduce the possibility or trying to connect at the same time
 			// pretty rare occasion in real life (which we handle anyway), but happens a lot when running everything in 1 binary.
-			time.Sleep(time.Duration(i) * 50 * time.Millisecond)
 			if its.BeforeHook != nil {
 				its.BeforeHook(i, swarm[i])
 			}

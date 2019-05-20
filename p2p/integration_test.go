@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
+	"math/rand"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -46,44 +47,44 @@ func (its *IntegrationTestSuite) Test_Gossiping() {
 	msgChans := make([]chan service.GossipMessage, 0)
 	exProto := RandString(10)
 
-	node1 := its.Instances[0]
-
 	its.ForAll(func(idx int, s NodeTestInstance) error {
 		msgChans = append(msgChans, s.RegisterGossipProtocol(exProto))
 		return nil
 	}, nil)
 
-	msg := []byte(RandString(10))
-	time.Sleep(1 * time.Second)
+	MSGS := 5
+	for i := 0; i < MSGS; i++ {
+		msg := []byte(RandString(10000))
+		rnd := rand.Int31n(int32(len(its.Instances)))
+		_ = its.Instances[rnd].Broadcast(exProto, []byte(msg))
+		numgot := int32(0)
 
-	_ = node1.Broadcast(exProto, []byte(msg))
-	numgot := int32(0)
-
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*100)
-	errg, ctx := errgroup.WithContext(ctx)
-	for _, mc := range msgChans {
-		ctx := ctx
-		mc := mc
-		numgot := &numgot
-		errg.Go(func() error {
-			select {
-			case got := <-mc:
-				if !bytes.Equal(got.Bytes(), msg) {
-					return fmt.Errorf("wrong msg, got: %s, want: %s", got, msg)
+		ctx, _ := context.WithTimeout(context.Background(), time.Second*100)
+		errg, ctx := errgroup.WithContext(ctx)
+		for _, mc := range msgChans {
+			ctx := ctx
+			mc := mc
+			numgot := &numgot
+			errg.Go(func() error {
+				select {
+				case got := <-mc:
+					if !bytes.Equal(got.Bytes(), msg) {
+						return fmt.Errorf("wrong msg, got: %s, want: %s", got, msg)
+					}
+					got.ReportValidation(exProto)
+					atomic.AddInt32(numgot, 1)
+					return nil
+				case <-ctx.Done():
+					return errors.New("timed out")
 				}
-				got.ReportValidation(exProto)
-				atomic.AddInt32(numgot, 1)
-				return nil
-			case <-ctx.Done():
-				return errors.New("timed out")
-			}
-		})
-	}
+			})
+		}
 
-	errs := errg.Wait()
-	its.T().Log(errs)
-	its.NoError(errs)
-	its.Equal(int(numgot), its.BootstrappedNodeCount+its.BootstrapNodesCount)
+		errs := errg.Wait()
+		its.T().Log(errs)
+		its.NoError(errs)
+		its.Equal(int(numgot), its.BootstrappedNodeCount+its.BootstrapNodesCount)
+	}
 }
 
 func Test_ReallySmallP2PIntegrationSuite(t *testing.T) {

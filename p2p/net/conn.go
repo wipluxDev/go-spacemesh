@@ -18,9 +18,9 @@ import (
 
 var (
 	// ErrClosedIncomingChannel is sent when the connection is closed because the underlying formatter incoming channel was closed
-	ErrClosedIncomingChannel = errors.New("unexpected closed incoming channel")
+	ErrClosedIncomingChannel = errors.New("connection closed for incoming messages")
 	// ErrConnectionClosed is sent when the connection is closed after Close was called
-	ErrConnectionClosed = errors.New("connections was intentionally closed")
+	ErrConnectionClosed = errors.New("connection was intentionally closed")
 )
 
 // ConnectionSource specifies the connection originator - local or remote node.

@@ -207,11 +207,13 @@ func (n *Net) createSecuredConnection(address string, remotePubkey p2pcrypto.Pub
 
 	handshakeMessage, err := generateHandshakeMessage(session, n.networkID, n.listenAddress.Port, n.localNode.PublicKey())
 	if err != nil {
+		n.logger.Error("Closing connection, failed to create HS msg, err:%v", err)
 		conn.Close()
 		return nil, err
 	}
 	err = conn.Send(handshakeMessage)
 	if err != nil {
+		n.logger.Error("Closing connection, failed to send HS msg, err:%v", err)
 		conn.Close()
 		return nil, err
 	}

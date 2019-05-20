@@ -109,13 +109,7 @@ func (p *peer) send(msg []byte, checksum hash) {
 	err := p.net.SendMessage(p.pubkey, ProtocolName, msg)
 	if err != nil {
 		p.Log.Error("Gossip protocol failed to send msg (calcHash %d) to peer %v, first attempt. err=%v", checksum, p.pubkey, err)
-		// doing one retry before giving up
-		// TODO: find out if this is really needed
-		err = p.net.SendMessage(p.pubkey, "", msg)
-		if err != nil {
-			p.Log.Error("Gossip protocol failed to send msg (calcHash %d) to peer %v, second attempt. err=%v", checksum, p.pubkey, err)
-			return
-		}
+		// TODO: check if a retry is needed here.
 	}
 }
 
@@ -164,7 +158,7 @@ peerLoop:
 		if exclude.String() == p {
 			continue peerLoop
 		}
-		go prot.peers[p].send(data, h) // non blocking
+		prot.peers[p].send(data, h) // blocks only until sending is done
 	}
 	prot.peersMutex.RUnlock()
 }

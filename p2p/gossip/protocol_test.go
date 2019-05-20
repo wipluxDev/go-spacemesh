@@ -489,3 +489,28 @@ func TestHash(t *testing.T) {
 	assert.NotEqual(t, calcHash(msg1, prot1), calcHash(msg1, prot2))
 	assert.NotEqual(t, calcHash(msg1, prot1), calcHash(msg2, prot1))
 }
+
+func Test_NotSendingToSender(t *testing.T) {
+	net := newMockBaseNetwork()
+	n := NewProtocol(config.DefaultConfig().SwarmConfig, net, newPubkey(t), log.New("testnodups", "", ""))
+
+	n.Start()
+
+	pks := []p2pcrypto.PublicKey{}
+
+	for i := 0; i < 5; i++ {
+		p := newPubkey(t)
+		n.addPeer(p)
+		pks = append(pks, p)
+	}
+
+	require.Equal(t, n.peersCount(), len(pks))
+
+	dat := []byte("LOL")
+	hash := calcHash(dat, "stamprot")
+	net.msgwg.Add(len(pks) - 1)
+
+	n.propagateMessage(dat, hash, "stamprot", pks[0])
+
+	require.Equal(t, net.totalMessageSent(), len(pks)-1)
+}
