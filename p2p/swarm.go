@@ -312,7 +312,7 @@ func (s *swarm) sendMessageImpl(peerPubKey p2pcrypto.PublicKey, protocol string,
 	var err error
 	var conn net.Connection
 
-	if peerPubKey.String() == s.lNode.PublicKey().String() {
+	if peerPubKey == s.lNode.PublicKey() {
 		return errors.New("can't send message to self")
 	}
 
@@ -514,7 +514,7 @@ func (s *swarm) onRemoteClientMessage(msg net.IncomingMessageEvent) error {
 		return err
 	}
 
-	s.lNode.Debug("Handle %v message from <<  %v", pm.Metadata.NextProtocol, msg.Conn.RemotePublicKey().String())
+	s.lNode.Debug("Handle %v message from <<  %s", pm.Metadata.NextProtocol, msg.Conn.RemotePublicKey())
 
 	// Add metadata collected from p2p message (todo: maybe pass sender and protocol inside metadata)
 	p2pmeta := service.P2PMetadata{msg.Conn.RemoteAddr()}

@@ -588,26 +588,28 @@ func (a *addrBook) RemoveAddress(key p2pcrypto.PublicKey) {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
-	ka := a.addrIndex[key.String()]
+	name := key.String()
+
+	ka := a.addrIndex[name]
 	if ka == nil {
 		return
 	}
 
 	for _, b := range a.addrNew {
-		if _, ok := b[key.String()]; ok {
-			delete(b, key.String())
+		if _, ok := b[name]; ok {
+			delete(b, name)
 			a.nNew--
 		}
 	}
 
 	for _, b := range a.addrTried {
-		if _, ok := b[key.String()]; ok {
-			delete(b, key.String())
+		if _, ok := b[name]; ok {
+			delete(b, name)
 			a.nTried--
 		}
 	}
 
-	delete(a.addrIndex, key.String())
+	delete(a.addrIndex, name)
 }
 
 // reset resets the address manager by reinitialising the random source
