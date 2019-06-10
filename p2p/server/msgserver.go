@@ -11,6 +11,27 @@ import (
 	"time"
 )
 
+
+//type UDPMsgServer struct {
+//	MessageServer
+//}
+//
+//func (p *UDPMsgServer) SendRequestUDP(msgType MessageType, payload []byte, id p2pcrypto.PublicKey, address *net.UDPAddr, resHandler func(msg []byte)) error {
+//	reqID := p.newRequestId()
+//	p.pendMutex.Lock()
+//	p.resHandlers[reqID] = resHandler
+//	p.pendingQueue.PushBack(Item{id: reqID, timestamp: time.Now()})
+//	p.pendMutex.Unlock()
+//	msg := &service.DataMsgWrapper{Req: true, ReqID: reqID, MsgType: uint32(msgType), Payload: payload}
+//	if sendErr := p.network.SendWrappedMessage(id, p.name, msg); sendErr != nil {
+//		p.Error("sending message failed ", msg, " error: ", sendErr)
+//		p.removeFromPending(reqID)
+//		return sendErr
+//	}
+//	p.Debug("sent request id: %v", reqID)
+//	return nil
+//}
+
 type MessageType uint32
 
 type Message interface {

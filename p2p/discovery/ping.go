@@ -22,10 +22,12 @@ func (p *protocol) newPingRequestHandler() func(msg server.Message) []byte {
 			return nil
 		}
 
-		if err := p.verifyPinger(msg.Metadata().FromAddress, req); err != nil {
-			p.logger.Error("msg contents were not valid err=", err)
-			return nil
-		}
+		go func() {
+			if err := p.verifyPinger(msg.Metadata().FromAddress, req); err != nil {
+				//todo: black list ?
+				p.logger.Error("didn't add peer to addrbook. msg contents were not valid err=", err)
+			}
+		}()
 
 		//pong
 		payload, err := proto.Marshal(&pb.Ping{
@@ -62,6 +64,7 @@ func extractAddress(from net.Addr, addrString string) (string, error) {
 	return net.JoinHostPort(addr, port), nil
 }
 
+
 func (p *protocol) verifyPinger(from net.Addr, pi *pb.Ping) error {
 	k, err := p2pcrypto.NewPubkeyFromBytes(pi.Me.NodeId)
 
@@ -77,14 +80,33 @@ func (p *protocol) verifyPinger(from net.Addr, pi *pb.Ping) error {
 	if err != nil {
 		return nil
 	}
-
 	// todo : Validate ToAddr or drop it.
-	// todo: check the address provided with an extra ping before updating. ( if we haven't checked it for a while )
 	// todo: decide on best way to know our ext address
 
 	dn := NodeInfoFromNode(node.New(k, tcp), udp)
-	// inbound ping is the actual source of this node info
-	p.table.AddAddress(dn, dn)
+
+	if p.needPong(k) {
+		p.table.AddAddress(dn, dn)
+		if ka := p.table.Find(k); ka == nil {
+			// ping the actual source of this node info
+			p.table.AddAddress(dn, dn)
+		} else {
+			if ka.na.udpAddress != udp {
+				p.table.AddAddress(dn, dn)
+				// todo : what do we do here ?
+				// address replaced ?
+				// maybe adversary tries to make us remove'
+			}
+		}
+
+		err = p.Ping(k)
+
+		if err != nil {
+			p.table.RemoveAddress(k)
+			return err
+		}
+	}
+
 	return nil
 }
 

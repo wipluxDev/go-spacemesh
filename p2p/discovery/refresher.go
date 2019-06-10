@@ -206,6 +206,7 @@ func (r *refresher) requestAddresses(servers []NodeInfo) []NodeInfo {
 				//todo: consider error and maybe remove
 				//todo: count failed queries and remove not functioning
 				r.logger.Warning("Peer %v didn't response to protocol queries - err:%v", cr.src.Pretty(), cr.err)
+				r.book.RemoveAddress(cr.src.PublicKey())
 				continue
 			}
 			if cr.res != nil && len(cr.res) > 0 {

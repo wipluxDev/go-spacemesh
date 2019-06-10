@@ -11,8 +11,55 @@ import (
 	"time"
 )
 
+func (p *protocol) needPong(k p2pcrypto.PublicKey) bool {
+	p.pingpongLock.RLock()
+	t, ok := p.lastpong[k]
+	p.pingpongLock.RUnlock()
+	if ok {
+		if time.Now().Sub(t) < PingPongExpiration {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *protocol) needPing(k p2pcrypto.PublicKey) bool {
+	p.pingpongLock.RLock()
+	t, ok := p.lastping[k]
+	p.pingpongLock.RUnlock()
+	if ok {
+		if time.Now().Sub(t) < PingPongExpiration {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *protocol) pingAndUpdate(k p2pcrypto.PublicKey) error {
+	err := p.Ping(k)
+	if err != nil {
+		return err
+	}
+	p.pingpongLock.Lock()
+	p.lastpong[k] = time.Now()
+	p.pingpongLock.Unlock()
+	return nil
+}
+
 func (p *protocol) newGetAddressesRequestHandler() func(msg server.Message) []byte {
 	return func(msg server.Message) []byte {
+
+		if p.needPong(msg.Sender()) {
+			ka := p.table.Find(msg.Sender())
+			if ka == nil {
+				return nil // unknown peer. he should've pinged us before
+			}
+			err := p.pingAndUpdate(msg.Sender())
+			if err != nil {
+				return nil
+			}
+		}
+
 		start := time.Now()
 		p.logger.Debug("Got a find_node request at from ", msg.Sender().String())
 
@@ -39,6 +86,7 @@ func (p *protocol) newGetAddressesRequestHandler() func(msg server.Message) []by
 
 // GetAddresses Send a single find node request to a remote node
 func (p *protocol) GetAddresses(server p2pcrypto.PublicKey) ([]NodeInfo, error) {
+
 	start := time.Now()
 	var err error
 

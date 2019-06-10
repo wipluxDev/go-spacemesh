@@ -251,6 +251,13 @@ func (a *addrBook) Lookup(addr p2pcrypto.PublicKey) (NodeInfo, error) {
 	return d.na, nil
 }
 
+func (a *addrBook) Find(addr p2pcrypto.PublicKey) *KnownAddress {
+	a.mtx.Lock()
+	f := a.find(addr)
+	a.mtx.Unlock()
+	return f
+}
+
 func (a *addrBook) find(addr p2pcrypto.PublicKey) *KnownAddress {
 	return a.addrIndex[addr.String()]
 }

@@ -3,8 +3,10 @@ package discovery
 import (
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/node"
+	"github.com/spacemeshos/go-spacemesh/p2p/p2pcrypto"
 	"github.com/spacemeshos/go-spacemesh/p2p/server"
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
+	"sync"
 	"time"
 )
 
@@ -13,6 +15,8 @@ type protocolRoutingTable interface {
 	AddAddresses(n []NodeInfo, src NodeInfo)
 	AddAddress(n NodeInfo, src NodeInfo)
 	AddressCache() []NodeInfo
+	RemoveAddress(key p2pcrypto.PublicKey)
+	Find(key p2pcrypto.PublicKey) *KnownAddress
 }
 
 type protocol struct {
@@ -20,6 +24,10 @@ type protocol struct {
 	table     protocolRoutingTable
 	logger    log.Log
 	msgServer *server.MessageServer
+
+	pingpongLock sync.RWMutex
+	lastpong     map[p2pcrypto.PublicKey]time.Time
+	lastping     map[p2pcrypto.PublicKey]time.Time
 
 	localTcpAddress string
 	localUdpAddress string
@@ -38,6 +46,8 @@ const MessageBufSize = 100
 
 // MessageTimeout is the timeout we tolerate when waiting for a message reply
 const MessageTimeout = time.Second * 1 // TODO: Parametrize
+
+const PingPongExpiration = 24 * time.Hour
 
 // PINGPONG is the ping protocol ID
 const PINGPONG = 0
