@@ -91,8 +91,7 @@ func (bl *BlockListener) ListenToGossipBlocks() {
 }
 
 func (bl *BlockListener) handleBlock(blk *types.Block) bool {
-
-	bl.Log.With().Info("got new block", log.Uint64("id", uint64(blk.Id)), log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)))
+	bl.Log.With().Info("got new block", log.Uint64("layer_id", uint64(blk.LayerIndex)), log.Uint64("id", uint64(blk.Id)), log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)))
 	if err := bl.SyncAndValidate(blk); err != nil {
 		bl.Error("handleBlock %v failed ", blk.ID(), err)
 		return false

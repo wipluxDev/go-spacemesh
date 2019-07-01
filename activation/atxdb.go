@@ -294,16 +294,19 @@ func (db *ActivationDb) StoreAtx(ech types.EpochId, atx *types.ActivationTx) err
 }
 
 func (db *ActivationDb) storeAtxUnlocked(atx *types.ActivationTx) error {
+	db.log.Info("marshling atx's nipst %v", atx.ShortId())
 	b, err := types.InterfaceToBytes(atx.Nipst)
 	if err != nil {
 		return err
 	}
+	db.log.Info("Storing atx %v 's nipst in db", atx.ShortId())
 	db.nipstLock.Lock()
 	err = db.nipsts.Put(atx.Id().Bytes(), b)
 	db.nipstLock.Unlock()
 	if err != nil {
 		return err
 	}
+	db.log.Info("Stored atx %v 's nipst in db", atx.ShortId())
 	//todo: think of how to break down the object better
 	atx.Nipst = nil
 
@@ -316,6 +319,9 @@ func (db *ActivationDb) storeAtxUnlocked(atx *types.ActivationTx) error {
 	if err != nil {
 		return err
 	}
+
+	db.log.Info("Stored atxID in atxDB %v", atx.ShortId())
+
 	return nil
 }
 
