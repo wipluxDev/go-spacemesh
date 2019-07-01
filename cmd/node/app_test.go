@@ -189,7 +189,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 								clientsDone++
 								if clientsDone == len(suite.apps)-1 {
 									log.Info("%d roots confirmed out of %d", clientsDone, len(suite.apps))
-									break lop
+									break loop
 								}
 							}
 						}
