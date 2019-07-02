@@ -6,33 +6,37 @@ script_on_exit: '' # Uncomment this to save logs './k8s/log-client-pods.sh'
 
 genesis_delta: 150
 single_pod_ready_time_out: 60
-deployment_ready_time_out: 120
+deployment_ready_time_out: 300
 config_path: '../config.toml'
 
 bootstrap:
-  image: 'spacemeshos/go-spacemesh:develop'
+  image: 'spacemeshos/go-spacemesh-dev:testing_hybrid4'
   command: '/bin/go-spacemesh'
   replicas: 1
   args:
     randcon: '8'
-    hare-committee-size: '20'
-    hare-max-adversaries: '9'
+    hare-committee-size: '30'
+    hare-max-adversaries: '15'
     hare-round-duration-sec: '10'
-    layer-duration-sec: '60'
-    layer-average-size: '20'
-    hare-wakeup-delta: '10'
+    layer-duration-sec: '180'
+    layer-average-size: '40'
+    hare-wakeup-delta: '30'
+    layers-per-epoch: '4'
+    coinbase: '0x4321'
 client:
-  image: 'spacemeshos/go-spacemesh:develop'
+  image: 'spacemeshos/go-spacemesh-dev:testing_hybrid4'
   command: '/bin/go-spacemesh'
-  replicas: 19
+  replicas: 40
   args:
     randcon: '8'
-    hare-committee-size: '20'
-    hare-max-adversaries: '9'
-    hare-round-duration-sec: '10'
-    layer-duration-sec: '60'
-    layer-average-size: '20'
-    hare-wakeup-delta: '10'
+    hare-committee-size: '30'
+    hare-max-adversaries: '15'
+    hare-round-duration-sec: '30'
+    layer-duration-sec: '180'
+    layer-average-size: '40'
+    hare-wakeup-delta: '30'
+    layers-per-epoch: '4'
+    coinbase: '0x1234'
 elastic:
   host: elastic.spacemesh.io
   port: 9200

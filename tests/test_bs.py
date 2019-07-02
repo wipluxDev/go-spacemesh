@@ -416,9 +416,9 @@ def test_mining(setup_network):
     api = 'v1/balance'
     data = '{"address":"0000000000000000000000000000000000002222"}'
     end = start = time.time()
-    layer_avg_size = 20
-    last_layer = 9
-    layers_per_epoch = 3
+    layer_avg_size = 40
+    last_layer = 25
+    layers_per_epoch = 4
     # deviation = 0.2
     last_epoch = last_layer / layers_per_epoch
 

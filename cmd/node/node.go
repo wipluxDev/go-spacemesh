@@ -343,7 +343,7 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 
 	validator := nipst.NewValidator(commitmentConfig, poetDb)
 	mdb := mesh.NewPersistentMeshDB(dbStorepath, lg.WithName("meshDb"))
-	atxdb := activation.NewActivationDb(atxdbstore, nipstStore, idStore, mdb, app.Config.CONSENSUS.LayersPerEpoch, validator, lg.WithName("atxDb"))
+	atxdb := activation.NewActivationDb(atxdbstore, nipstStore, idStore, mdb, uint16(app.Config.CONSENSUS.LayersPerEpoch), validator, lg.WithName("atxDb"))
 
 	beaconProvider := &oracle.EpochBeaconProvider{}
 	eligibilityValidator := oracle.NewBlockEligibilityValidator(int32(layerSize), uint16(layersPerEpoch), atxdb, beaconProvider, BLS381.Verify2, lg.WithName("blkElgValidator"))
@@ -366,10 +366,10 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 		hOracle = rolacle
 	} else { // regular oracle, build and use it
 		beacon := eligibility.NewBeacon(trtl)
-		hOracle = eligibility.New(beacon, atxdb, BLS381.Verify2, vrfSigner, app.Config.CONSENSUS.LayersPerEpoch)
+		hOracle = eligibility.New(beacon, atxdb, BLS381.Verify2, vrfSigner, uint16(app.Config.CONSENSUS.LayersPerEpoch))
 	}
 
-	ha := hare.New(app.Config.HARE, swarm, sgn, nodeID, syncer.IsSynced, msh, hOracle, app.Config.CONSENSUS.LayersPerEpoch, idStore, atxdb, clock.Subscribe(), lg.WithName("hare"))
+	ha := hare.New(app.Config.HARE, swarm, sgn, nodeID, syncer.IsSynced, msh, hOracle, uint16(app.Config.CONSENSUS.LayersPerEpoch), idStore, atxdb, clock.Subscribe(), lg.WithName("hare"))
 
 	blockProducer := miner.NewBlockBuilder(nodeID, sgn, swarm, clock.Subscribe(), txpool, atxpool, coinToss, msh, ha, blockOracle, atxdb, lg.WithName("blockProducer"))
 
@@ -397,7 +397,7 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 		app.log.Panic("invalid Coinbase account")
 	}
 
-	atxBuilder := activation.NewBuilder(nodeID, coinBase, atxdb, swarm, atxdb, msh, app.Config.CONSENSUS.LayersPerEpoch, nipstBuilder, clock.Subscribe(), syncer.IsSynced, lg.WithName("atxBuilder"))
+	atxBuilder := activation.NewBuilder(nodeID, coinBase, atxdb, swarm, atxdb, msh, uint16(app.Config.CONSENSUS.LayersPerEpoch), nipstBuilder, clock.Subscribe(), syncer.IsSynced, lg.WithName("atxBuilder"))
 
 	app.txProcessor = processor
 	app.blockProducer = &blockProducer
@@ -495,6 +495,8 @@ func getEdIdentity() (*signing.EdSigner, error) {
 }
 
 func (app *SpacemeshApp) Start(cmd *cobra.Command, args []string) {
+
+	fmt.Println("######## LAYERS PER EPOCH ", app.Config.CONSENSUS.LayersPerEpoch)
 	log.Info("Starting Spacemesh")
 	if app.Config.MemProfile != "" {
 		log.Info("Starting mem profiling")
@@ -576,6 +578,9 @@ func (app *SpacemeshApp) Start(cmd *cobra.Command, args []string) {
 		log.Error("cannot start services %v", err.Error())
 		return
 	}
+
+	app.setupGenesis()
+
 	if app.Config.TestMode {
 		app.setupTestFeatures()
 	}
