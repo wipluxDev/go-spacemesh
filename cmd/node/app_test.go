@@ -98,11 +98,11 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 		smApp.Config.HARE.F = numOfInstances / 2
 		smApp.Config.HARE.ExpectedLeaders = 5
 		smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
-		smApp.Config.HARE.RoundDuration = 12
-		smApp.Config.HARE.WakeupDelta = 12
+		smApp.Config.HARE.RoundDuration = 30
+		smApp.Config.HARE.WakeupDelta = 30
 		smApp.Config.LayerAvgSize = numOfInstances
 		smApp.Config.CONSENSUS.LayersPerEpoch = 4
-		smApp.Config.LayerDurationSec = 90
+		smApp.Config.LayerDurationSec = 180
 
 		edSgn := signing.NewEdSigner()
 		pub := edSgn.PublicKey()
@@ -156,15 +156,15 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 
 	txbytes, _ := types.TransactionAsBytes(&tx)
 	path := "../tmp/test/state_" + time.Now().String()
-	suite.initMultipleInstances(5, path)
+	suite.initMultipleInstances(50, path)
 	for _, a := range suite.apps {
 		a.startServices()
 	}
 
-	//	defer suite.gracefulShutdown()
+	defer suite.gracefulShutdown()
 
 	_ = suite.apps[0].P2P.Broadcast(miner.IncomingTxProtocol, txbytes)
-	timeout := time.After(4.5 * 60 * time.Second)
+	timeout := time.After(60 * time.Second * 60)
 
 	stickyClientsDone := 0
 	loop:
@@ -207,22 +207,9 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 		}
 	}
 
-	suite.validateBlocksAndATXs(11)
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("############################################################## asserts for layer 12 passed ? #####################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	suite.validateBlocksAndATXs(19)
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("############################################################## asserts for layer 20 passed ? #####################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
-	fmt.Println("###############################################################################################################################")
+	for i := 3; true; i++ {
+		suite.validateBlocksAndATXs(types.LayerID(i*4-1))
+	}
 }
 
 func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
@@ -288,17 +275,20 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 			}
 			if len(d.layertoblocks) != len(d2.layertoblocks) {
 			fmt.Printf("%v has not matching layer to %v. %v not %v \r\n", i, i2, len(d.layertoblocks), len(d2.layertoblocks))
-			}
+			panic("WTF")
+		}
 
 			for l, bl := range d.layertoblocks {
 				 if len(bl) != len(d2.layertoblocks[l]) {
 					fmt.Println(fmt.Sprintf("%v and %v had different block maps for layer: %v: %v: %v \r\n %v: %v \r\n\r\n", i, i2, l, i, bl, i2, d2.layertoblocks[l]))
+				panic("WTF")
 				}
 			}
 
 			for e, atx := range d.atxPerEpoch {
 				if len(atx) != len(d2.atxPerEpoch[e]) {
 					fmt.Printf("%v and %v had different atx maps for epoch: %v: %v: %v \r\n %v: %v \r\n\r\n", i, i2, e, i, atx, i2, d2.atxPerEpoch[e])
+panic("WTFFFFF")
 					}
 			}
 		}
@@ -332,12 +322,15 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 
 	if ((total_blocks-first_epoch_blocks)/(lastlayer-layers_per_epoch)) != layer_avg_size {
 		fmt.Printf("not good num of blocks got: %v, want: %v. total_blocks: %v, first_epoch_blocks: %v, lastlayer: %v, layers_per_epoch: %v \r\n\r\n\r\n", (total_blocks-first_epoch_blocks)/(lastlayer-layers_per_epoch), layer_avg_size, total_blocks, first_epoch_blocks, lastlayer, layers_per_epoch)
-
+panic("NOT ENOUGH BLOCKS")
 }
 	if total_atxs != (lastlayer/layers_per_epoch)*len(suite.apps) {
 		fmt.Printf("not good num of atxs got: %v, want: %v\r\n", total_atxs, (lastlayer/layers_per_epoch)*len(suite.apps))
+		panic("NOT ENOUGH ATX")
 
 	}
+
+	fmt.Printf("ALL ASSERTS FOR %v WAS SUCCESSFULL ##################################################################\r\n", untilLayer)
 }
 
 func (suite *AppTestSuite) validateLastATXActiveSetSize(app *SpacemeshApp) {

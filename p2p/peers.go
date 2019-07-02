@@ -39,7 +39,11 @@ func (pi PeersImpl) Close() {
 }
 
 func (pi PeersImpl) GetPeers() []Peer {
-	return pi.snapshot.Load().([]Peer)
+	p := pi.snapshot.Load().([]Peer)
+	if len(p) == 0 {
+		panic("WTF")
+	}
+	return p
 }
 
 func (pi *PeersImpl) listenToPeers(newPeerC chan p2pcrypto.PublicKey, expiredPeerC chan p2pcrypto.PublicKey) {

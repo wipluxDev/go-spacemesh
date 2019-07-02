@@ -301,6 +301,7 @@ func (t *BlockBuilder) acceptBlockData() {
 						t.Log.Error("cannot serialize block %v", err)
 						return
 					}
+					time.Sleep(7 * time.Second)
 					t.network.Broadcast(config.NewBlockProtocol, bytes)
 				}()
 			}

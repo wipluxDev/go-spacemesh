@@ -114,6 +114,10 @@ func (t *AtxDbMock) ProcessAtx(atx *types.ActivationTx) {
 	t.nipsts[atx.Id()] = atx.Nipst
 }
 
+func (t *AtxDbMock) GetEpochAtxIds(id types.EpochId) ([]types.AtxId, error) {
+	return []types.AtxId{}, nil
+}
+
 func (*AtxDbMock) IsIdentityActive(edId string, layer types.LayerID) (bool, error) {
 	return true, nil
 }
