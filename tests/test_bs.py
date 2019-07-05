@@ -421,18 +421,20 @@ def test_mining(setup_network):
     api = 'v1/balance'
     data = '{"address":"0000000000000000000000000000000000002222"}'
     end = start = time.time()
-    layer_avg_size = 20
-    last_layer = 9
-    layers_per_epoch = 3
-    # deviation = 0.2
-    last_epoch = last_layer / layers_per_epoch
-
-    queries.wait_for_latest_layer(testconfig["namespace"], last_layer)
-    print("test took {:.3f} seconds ".format(end - start))
+    layer_avg_size = testconfig['client']['args']['layer-average-size']
     total_pods = len(setup_network.clients.pods) + len(setup_network.bootstrap.pods)
-    analyse.analyze_mining(testconfig['namespace'], last_layer, layers_per_epoch, layer_avg_size, total_pods)
+    layers_per_epoch = int(testconfig['client']['args']['layers-per-epoch'])
 
-    validate_hare(current_index, ns)  # validate hare
+    # note: runs forever until assert is false
+    # checks every epoch layer. 12 is the first one (3*4)
+    i = 3
+    while True:
+        epoch_layer = i*layers_per_epoch
+        queries.wait_for_latest_layer(testconfig["namespace"], epoch_layer)
+        time.sleep(20)
+        analyse.analyze_mining(testconfig['namespace'], epoch_layer, layers_per_epoch, layer_avg_size, total_pods)
+        validate_hare(current_index, ns)  # validate hare
+        i += 1
 
 
 ''' todo: when atx flow stabilized re enable this test

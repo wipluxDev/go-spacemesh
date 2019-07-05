@@ -103,6 +103,7 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 		smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
 		smApp.Config.LayerAvgSize = numOfInstances
 		smApp.Config.CONSENSUS.LayersPerEpoch = 3
+		smApp.Config.LayerAvgSize = numOfInstances
 
 		edSgn := signing.NewEdSigner()
 		pub := edSgn.PublicKey()
@@ -157,7 +158,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}
 	txbytes, _ := types.SignedTransactionAsBytes(tx)
 	path := "../tmp/test/state_" + time.Now().String()
-	suite.initMultipleInstances(5, path)
+	suite.initMultipleInstances(10, path)
 	for _, a := range suite.apps {
 		a.startServices()
 	}
@@ -256,7 +257,7 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 			for _, b := range lyr.Blocks() {
 				datamap[ap.nodeId.Key].layertoblocks[lyr.Index()] = append(datamap[ap.nodeId.Key].layertoblocks[lyr.Index()], b.ID())
 			}
-			epoch := lyr.Index().GetEpoch(ap.Config.CONSENSUS.LayersPerEpoch)
+			epoch := lyr.Index().GetEpoch(uint16(ap.Config.CONSENSUS.LayersPerEpoch))
 			if _, ok := datamap[ap.nodeId.Key].atxPerEpoch[epoch]; !ok {
 				atxs, err := ap.blockListener.AtxDB.GetEpochAtxIds(epoch)
 				if err != nil {

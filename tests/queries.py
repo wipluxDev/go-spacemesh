@@ -29,7 +29,7 @@ class ES:
         ES_PASSWD = os.getenv("ES_PASSWD")
         if not ES_PASSWD:
             raise Exception("Unknown Elasticsearch password. Please check 'ES_PASSWD' environment variable")
-        self.es = Elasticsearch("http://elastic.spacemesh.io",
+        self.es = Elasticsearch("http://elastic-alpha.spacemesh.io",
                                 http_auth=("spacemesh", ES_PASSWD), port=80, timeout=90)
 
     def get_search_api(self):
@@ -178,7 +178,7 @@ def print_layer_stat(layers):
 def get_blocks_per_node_and_layer(deployment):
     # I've created a block in layer %v. id: %v, num of transactions: %v, votes: %d, viewEdges: %d, atx %v, atxs:%v
     block_fields = {"M": "I've created a block in layer"}
-    blocks = query_message(current_index, deployment, deployment, block_fields, True)
+    blocks = query_message(current_index, deployment, deployment, block_fields, False)
     print("found " + str(len(blocks)) + " blocks")
     nodes = sort_by_nodeid(blocks)
     layers = sort_by_layer(blocks)
@@ -188,7 +188,7 @@ def get_blocks_per_node_and_layer(deployment):
 
 def get_layers(deployment):
     block_fields = {"M": "release tick"}
-    layers = query_message(current_index, deployment, deployment, block_fields, True)
+    layers = query_message(current_index, deployment, deployment, block_fields, False)
     ids = [int(re.findall(r'\d+', x.M)[0]) for x in layers]
     return ids
 
@@ -214,7 +214,7 @@ def wait_for_latest_layer(deployment, layer_id):
 def get_atx_per_node(deployment):
     # based on log: atx published! id: %v, prevATXID: %v, posATXID: %v, layer: %v, published in epoch: %v, active set: %v miner: %v view %v
     block_fields = {"M": "atx published"}
-    atx_logs = query_message(current_index, deployment, deployment, block_fields, True)
+    atx_logs = query_message(current_index, deployment, deployment, block_fields, False)
     print("found " + str(len(atx_logs)) + " atxs")
     nodes = parseAtx(atx_logs)
     return nodes
@@ -223,7 +223,7 @@ def get_atx_per_node(deployment):
 def get_nodes_up(deployment):
     # based on log:
     block_fields = {"M": "Starting Spacemesh"}
-    logs = query_message(current_index, deployment, deployment, block_fields, True)
+    logs = query_message(current_index, deployment, deployment, block_fields, False)
     print("found " + str(len(logs)) + " nodes up")
     return len(logs)
 
@@ -289,25 +289,25 @@ def find_missing(indx, namespace, client_po_name, fields, min=1):
 
 
 def query_hare_output_set(indx, ns, layer):
-    hits = query_message(indx, ns, ns, {'M': 'Consensus process terminated', 'layer_id': str(layer)}, True)
+    hits = query_message(indx, ns, ns, {'M': 'Consensus process terminated', 'layer_id': str(layer)}, False)
     lst = [h.set_values for h in hits]
 
     return lst
 
 
 def query_round_1(indx, ns, layer):
-    return query_message(indx, ns, ns, {'M': 'Round 1 ended', 'is_svp_ready': 'true', 'layer_id': str(layer)}, True)
+    return query_message(indx, ns, ns, {'M': 'Round 1 ended', 'is_svp_ready': 'true', 'layer_id': str(layer)}, False)
 
 
 def query_round_2(indx, ns, layer):
-    hits = query_message(indx, ns, ns, {'M': 'Round 2 ended', 'layer_id': str(layer)}, True)
+    hits = query_message(indx, ns, ns, {'M': 'Round 2 ended', 'layer_id': str(layer)}, False)
     filtered = list(filter(lambda x: x.proposed_set != "nil", hits))
 
     return filtered
 
 
 def query_round_3(indx, ns, layer):
-    return query_message(indx, ns, ns, {'M': 'Round 3 ended: committing', 'layer_id': str(layer)}, True)
+    return query_message(indx, ns, ns, {'M': 'Round 3 ended: committing', 'layer_id': str(layer)}, False)
 
 
 def query_pre_round(indx, ns, layer):

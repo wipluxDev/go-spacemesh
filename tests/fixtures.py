@@ -80,8 +80,8 @@ def set_namespace(request, session_id, load_config):
         if restarted_pods:
             print('\n\nAttention!!! The following pods were restarted during test: {0}\n\n'.format(restarted_pods))
 
-        print("\nDeleting test namespace: {0}".format(testconfig['namespace']))
-        v1.delete_namespace(name=testconfig['namespace'], body=client.V1DeleteOptions())
+        # print("\nDeleting test namespace: {0}".format(testconfig['namespace']))
+        # v1.delete_namespace(name=testconfig['namespace'], body=client.V1DeleteOptions())
 
     request.addfinalizer(fin)
     return _setup_namespace()
