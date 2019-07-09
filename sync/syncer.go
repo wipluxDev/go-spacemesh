@@ -360,8 +360,8 @@ func (s *Syncer) DataAvailabilty(blk *types.Block) ([]*types.AddressableSignedTr
 		return txs, atxs, atxerr
 	}
 
-	blocklog.Info("fetched all block data txs %v atxs %v", len(txs), len(atxs))
 
+	blocklog.Info("fetched all atxs (total %v, unprocessed %v) for block ", len(blk.AtxIds), len(atxs))
 	return txs, atxs, nil
 }
 
