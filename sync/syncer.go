@@ -342,7 +342,7 @@ func (s *Syncer) DataAvailabilty(blk *types.Block) ([]*types.AddressableSignedTr
 
 	//sync ATxs
 	go func() {
-		atxs, atxerr = s.syncAtxs(blk.AtxIds)
+		atxs, atxerr = s.syncAtxs(blk.ID(), blk.AtxIds)
 		wg.Done()
 	}()
 
@@ -478,7 +478,7 @@ func (s *Syncer) syncTxs(txids []types.TransactionId) ([]*types.AddressableSigne
 }
 
 //returns atxs out of txids that are not in the local database
-func (s *Syncer) syncAtxs(atxIds []types.AtxId) ([]*types.ActivationTx, error) {
+func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.ActivationTx, error) {
 
 	//look in pool
 	unprocessedAtxs := make(map[types.AtxId]*types.ActivationTx, len(atxIds))
@@ -488,14 +488,14 @@ func (s *Syncer) syncAtxs(atxIds []types.AtxId) ([]*types.ActivationTx, error) {
 		if x, err := s.atxpool.Get(id); err == nil {
 			atx := x
 			if atx.Nipst == nil {
-				s.Warning("atx %v nipst not found ", id.ShortId())
+				s.Warning("atx %v nipst not found (found in block %v)", id.ShortId(), blkId)
 				missingInPool = append(missingInPool, id)
 				continue
 			}
-			s.Debug("found atx, %v in atx pool", id.ShortId())
+			s.Info("found atx, %v in atx pool (found in block %v)", id.ShortId(), blkId)
 			unprocessedAtxs[id] = &atx
 		} else {
-			s.Warning("atx %v not in atx pool", id.ShortId())
+			s.Warning("atx %v not in atx pool (found in block %v)", id.ShortId(), blkId)
 			missingInPool = append(missingInPool, id)
 		}
 	}
@@ -511,7 +511,7 @@ func (s *Syncer) syncAtxs(atxIds []types.AtxId) ([]*types.ActivationTx, error) {
 			atxs := out.([]types.ActivationTx)
 			for _, atx := range atxs {
 				if err := s.SyntacticallyValidateAtx(&atx); err != nil {
-					s.Warning("atx %v not valid %v", atx.ShortId(), err)
+					s.Warning("atx %v not valid %v (found in block %v)", atx.ShortId(), err, blkId)
 					continue
 				}
 				tmp := atx
@@ -527,7 +527,7 @@ func (s *Syncer) syncAtxs(atxIds []types.AtxId) ([]*types.ActivationTx, error) {
 		} else if _, ok := dbAtxs[id]; ok {
 			continue
 		} else {
-			return nil, errors.New(fmt.Sprintf("could not fetch atx %v", id.ShortId()))
+			return nil, errors.New(fmt.Sprintf("could not fetch atx %v (found in block %v)", id.ShortId(), blkId))
 		}
 	}
 	return atxs, nil
