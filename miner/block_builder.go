@@ -312,7 +312,7 @@ func (t *BlockBuilder) handleGossipAtx(data service.GossipMessage) {
 
 	t.AtxPool.Put(atx.Id(), atx)
 	data.ReportValidation(activation.AtxProtocol)
-	t.Info("stored and propagated new syntactically valid ATX: %v", atx.ShortId())
+	t.Info("added to mempool and propagated new syntactically valid ATX: %v", atx.ShortId())
 }
 
 func (t *BlockBuilder) acceptBlockData() {
