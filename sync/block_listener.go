@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"fmt"
 	"github.com/spacemeshos/go-spacemesh/config"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/server"
@@ -93,24 +92,32 @@ func (bl *BlockListener) ListenToGossipBlocks() {
 
 func (bl *BlockListener) HandleNewBlock(blk *types.Block) bool {
 
-	bl.Log.With().Info("got new block", log.Uint64("id", uint64(blk.Id)), log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)))
+	blocklog := bl.Log.WithFields(log.Uint64("block_id", uint64(blk.Id)))
+
+	blocklog.With().Info("got new block",  log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)))
 	//check if known
+
 	if _, err := bl.GetBlock(blk.Id); err == nil {
-		bl.Info("we already know this block %v ", blk.ID())
+		blocklog.Info("we already know this block")
 		return true
 	}
 
+	blocklog.With().Info("finished database check. running syntactic validation ")
+
+
 	txs, atxs, err := bl.BlockSyntacticValidation(blk)
 	if err != nil {
-		bl.Error("failed to validate block %v %v", blk.ID(), err)
+		blocklog.With().Error("failed to validate block", log.Err(err))
 		return false
 	}
+
+	blocklog.With().Info("finished syntactic validation adding block with txs")
 
 	if err := bl.AddBlockWithTxs(blk, txs, atxs); err != nil {
-		bl.Error(fmt.Sprintf("failed to add block %v to database %v", blk.ID(), err))
+		blocklog.With().Error("failed to add block to database", log.Err(err))
 		return false
 	}
 
-	bl.Info("added block %v to database", blk.ID())
+	blocklog.Info("finished adding block block successfully")
 	return true
 }

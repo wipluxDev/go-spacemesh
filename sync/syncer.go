@@ -260,12 +260,16 @@ func (s *Syncer) BlockSyntacticValidation(block *types.Block) ([]*types.Addressa
 		return nil, nil, errors.New(fmt.Sprintf("failed derefrencing block data %v %v", block.ID(), err))
 	}
 
+	blocklog := s.Log.WithFields(log.Uint64("block_id", uint64(block.Id)))
+
+	blocklog.Info("Starting data availability check")
 	//data availability
 	txs, atxs, err := s.DataAvailabilty(block)
 	if err != nil {
 		return nil, nil, errors.New(fmt.Sprintf("data availabilty failed for block %v", block.ID()))
 	}
 
+	blocklog.Info("validating block view")
 	//validate blocks view
 	if valid := s.ValidateView(block); valid == false {
 		return nil, nil, errors.New(fmt.Sprintf("block %v not syntacticly valid", block.ID()))
@@ -275,13 +279,16 @@ func (s *Syncer) BlockSyntacticValidation(block *types.Block) ([]*types.Addressa
 }
 
 func (s *Syncer) confirmBlockValidity(blk *types.Block) error {
-	s.Info("validate block %v ", blk.ID())
+	blocklog := s.WithFields(log.Uint64("block_id", uint64(blk.Id)))
+	blocklog.Info("extracting pubkey from block")
 
 	//check block signature and is identity active
 	pubKey, err := ed25519.ExtractPublicKey(blk.Bytes(), blk.Sig())
 	if err != nil {
 		return errors.New(fmt.Sprintf("could not extract block %v public key %v ", blk.ID(), err))
 	}
+
+	blocklog.Info("checking that identity in block is active")
 
 	active, atxid, err := s.IsIdentityActive(signing.NewPublicKey(pubKey).String(), blk.Layer())
 	if err != nil {
@@ -296,6 +303,8 @@ func (s *Syncer) confirmBlockValidity(blk *types.Block) error {
 		return errors.New(fmt.Sprintf("wrong associated atx got %v expected %v ", blk.ATXID.ShortId(), atxid.ShortId()))
 	}
 
+	blocklog.Info("checking block eligibilty")
+
 	//block eligibility
 	if eligable, err := s.BlockEligible(&blk.BlockHeader); err != nil || !eligable {
 		return errors.New(fmt.Sprintf("block %v eligablety check failed ", blk.ID()))
@@ -305,6 +314,7 @@ func (s *Syncer) confirmBlockValidity(blk *types.Block) error {
 }
 
 func (s *Syncer) ValidateView(blk *types.Block) bool {
+
 	vq := NewValidationQueue(s.Log.WithName("validQ"))
 	if err := vq.traverse(s, &blk.BlockHeader); err != nil {
 		s.Warning("could not validate %v view %v", blk.ID(), err)
@@ -314,6 +324,8 @@ func (s *Syncer) ValidateView(blk *types.Block) bool {
 }
 
 func (s *Syncer) DataAvailabilty(blk *types.Block) ([]*types.AddressableSignedTransaction, []*types.ActivationTx, error) {
+	blocklog := s.Log.WithFields(log.Uint64("block_id", uint64(blk.Id)))
+	blocklog.Info("starting to sync atxs and txs")
 	var txs []*types.AddressableSignedTransaction
 	var txerr error
 	wg := sync.WaitGroup{}
@@ -333,20 +345,22 @@ func (s *Syncer) DataAvailabilty(blk *types.Block) ([]*types.AddressableSignedTr
 		wg.Done()
 	}()
 
+	blocklog.Info("waiting sync atxs and txs")
+
 	wg.Wait()
 
 	if txerr != nil {
-		s.Warning("failed fetching block %v transactions %v", blk.ID(), txerr)
+		blocklog.Warning("failed fetching block transactions %v", txerr)
 		return txs, atxs, txerr
 	}
 
 	if atxerr != nil {
-		s.Warning("failed fetching block %v activation transactions %v", blk.ID(), atxerr)
+		blocklog.Warning("failed fetching block activation transactions %v", atxerr)
 		return txs, atxs, atxerr
 	}
 
-	s.Info("fetched all txs for block %v", blk.ID())
-	s.Info("fetched all atxs for block %v", blk.ID())
+	blocklog.Info("fetched all txs for block")
+	blocklog.Info("fetched all atxs for block")
 
 	return txs, atxs, nil
 }
