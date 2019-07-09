@@ -49,6 +49,9 @@ func (vq *validationQueue) done() {
 
 func (vq *validationQueue) traverse(s *Syncer, blk *types.BlockHeader) error {
 
+	blocklog := vq.Log.WithFields(log.Uint64("block_id", uint64(blk.Id)))
+	blocklog.Info("starting to traverse block view")
+
 	if vq.addDependencies(blk, s.GetBlock) == false {
 		return nil
 	}
@@ -56,6 +59,8 @@ func (vq *validationQueue) traverse(s *Syncer, blk *types.BlockHeader) error {
 	vq.callbacks[blk.ID()] = func() error {
 		return nil
 	}
+
+	blocklog.Info("starting fetch factory")
 
 	output := s.fetchWithFactory(NewBlockWorker(s, s.Concurrency, BlockReqFactory(), vq.queue))
 	for out := range output {
@@ -66,22 +71,26 @@ func (vq *validationQueue) traverse(s *Syncer, blk *types.BlockHeader) error {
 
 		block := out.(*types.Block)
 		vq.visited[block.ID()] = struct{}{}
-		s.Info("Validating view Block %v", block.ID())
+		blocklog.Info("Validating view Block")
 		if err := s.confirmBlockValidity(block); err != nil {
 			return err
 		}
 
+		blocklog.Info("done confirming validity adding finish callbacks")
+
 		vq.callbacks[block.ID()] = vq.finishBlockCallback(s, block)
 
+		blocklog.Info("Starting to add dependencies")
+
 		if vq.addDependencies(&block.BlockHeader, s.GetBlock) == false {
-			s.Info("dependencies done for %v", block.ID())
+			blocklog.Info("dependencies done")
 			doneBlocks := vq.updateDependencies(block.ID())
 			for _, bid := range doneBlocks {
 				if !vq.addToDatabase(bid) {
 					return errors.New(fmt.Sprintf("could not finalize block %v validation  ", blk.ID()))
 				}
 			}
-			vq.Info(" %v blocks in dependency map", len(vq.depMap))
+			blocklog.Info(" %v blocks in dependency map", len(vq.depMap))
 		}
 
 		if len(vq.reverseDepMap) == 0 {
@@ -89,6 +98,8 @@ func (vq *validationQueue) traverse(s *Syncer, blk *types.BlockHeader) error {
 			return nil
 		}
 	}
+
+	blocklog.Info("done traversing")
 
 	return nil
 }
