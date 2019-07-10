@@ -104,12 +104,13 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 
 		smApp.Config.HARE.N = numOfInstances
 		smApp.Config.HARE.F = numOfInstances / 2
-		smApp.Config.HARE.RoundDuration = 3
-		smApp.Config.HARE.WakeupDelta = 10
+		smApp.Config.HARE.RoundDuration = 25
+		smApp.Config.HARE.WakeupDelta = 25
 		smApp.Config.HARE.ExpectedLeaders = 5
 		smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
 		smApp.Config.LayerAvgSize = numOfInstances
-		smApp.Config.LayersPerEpoch = 3
+		smApp.Config.LayersPerEpoch = 4
+		smApp.Config.LayerDurationSec = 180
 
 		edSgn := signing.NewEdSigner()
 		pub := edSgn.PublicKey()
@@ -162,7 +163,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}
 	txbytes, _ := types.SignedTransactionAsBytes(tx)
 	path := "../tmp/test/state_" + time.Now().String()
-	suite.initMultipleInstances(5, path)
+	suite.initMultipleInstances(40, path)
 	for _, a := range suite.apps {
 		a.startServices()
 	}
@@ -170,7 +171,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	defer suite.gracefulShutdown()
 
 	_ = suite.apps[0].P2P.Broadcast(miner.IncomingTxProtocol, txbytes)
-	timeout := time.After(4.5 * 60 * time.Second)
+	timeout := time.After(60 * 60 * time.Second)
 
 	stickyClientsDone := 0
 loop:
@@ -212,8 +213,10 @@ loop:
 			time.Sleep(30 * time.Second)
 		}
 	}
-
-	suite.validateBlocksAndATXs(8)
+	for i := types.LayerID(3); true; i++ {
+		suite.validateBlocksAndATXs(i*4-1)
+		fmt.Printf("PASSED THAT SHITTTTTTT LAYER %v \r\n", i*4)
+	}
 
 }
 
@@ -233,7 +236,7 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 		for _, ap := range suite.apps {
 			curNodeLastLayer := ap.blockListener.ValidatedLayer()
 			if curNodeLastLayer < untilLayer {
-				log.Info("layer for %v was %v, want %v", ap.nodeId.Key, curNodeLastLayer, 8)
+				log.Info("layer for %v was %v, want %v", ap.nodeId.Key, curNodeLastLayer, untilLayer)
 			} else {
 				count++
 			}

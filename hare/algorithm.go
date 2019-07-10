@@ -343,7 +343,7 @@ func (proc *ConsensusProcess) sendMessage(msg *Msg) {
 		return
 	}
 
-	proc.With().Info("message sent", log.String("msg_type", msg.InnerMsg.Type.String()),
+	proc.With().Debug("message sent", log.String("msg_type", msg.InnerMsg.Type.String()),
 		log.Uint64("layer_id", uint64(proc.instanceId)))
 }
 
