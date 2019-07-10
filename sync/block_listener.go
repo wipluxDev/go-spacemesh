@@ -15,7 +15,8 @@ import (
 type MessageServer server.MessageServer
 
 type BlockListener struct {
-	*Syncer
+	syncer syncProvider
+	mp meshProvider
 	BlockValidator
 	log.Log
 	wg                   sync.WaitGroup
@@ -35,7 +36,7 @@ func (bl *BlockListener) Close() {
 	close(bl.exit)
 	bl.Info("block listener closing, waiting for gorutines")
 	bl.wg.Wait()
-	bl.Syncer.Close()
+	bl.syncer.Close()
 	bl.Info("block listener closed")
 }
 
@@ -45,9 +46,25 @@ func (bl *BlockListener) Start() {
 	}
 }
 
-func NewBlockListener(net service.Service, sync *Syncer, concurrency int, logger log.Log) *BlockListener {
+type p2pProvider interface {
+	RegisterGossipProtocol(string) chan service.GossipMessage
+}
+
+type meshProvider interface {
+	GetBlock(id types.BlockID) (*types.Block, error)
+	AddBlockWithTxs(blk *types.Block, txs []*types.AddressableSignedTransaction, atxs []*types.ActivationTx) error
+}
+
+type syncProvider interface {
+	IsSynced() bool
+	BlockSyntacticValidation(block *types.Block) ([]*types.AddressableSignedTransaction, []*types.ActivationTx, error)
+	Close()
+}
+
+func NewBlockListener(net p2pProvider, mp meshProvider,  sync syncProvider, concurrency int, logger log.Log) *BlockListener {
 	bl := BlockListener{
-		Syncer:               sync,
+		syncer:               sync,
+		mp: 					mp,
 		Log:                  logger,
 		semaphore:            make(chan struct{}, concurrency),
 		exit:                 make(chan struct{}),
@@ -63,7 +80,7 @@ func (bl *BlockListener) ListenToGossipBlocks() {
 			bl.Log.Info("listening  stopped")
 			return
 		case data := <-bl.receivedGossipBlocks:
-			if !bl.IsSynced() {
+			if !bl.syncer.IsSynced() {
 				bl.Info("ignoring gossip blocks - not synced yet")
 				break
 			}
@@ -97,7 +114,7 @@ func (bl *BlockListener) HandleNewBlock(blk *types.Block) bool {
 	blocklog.With().Info("got new block",  log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)))
 	//check if known
 
-	if _, err := bl.GetBlock(blk.Id); err == nil {
+	if _, err := bl.mp.GetBlock(blk.Id); err == nil {
 		blocklog.Info("we already know this block")
 		return true
 	}
@@ -105,7 +122,7 @@ func (bl *BlockListener) HandleNewBlock(blk *types.Block) bool {
 	blocklog.With().Info("finished database check. running syntactic validation ")
 
 
-	txs, atxs, err := bl.BlockSyntacticValidation(blk)
+	txs, atxs, err := bl.syncer.BlockSyntacticValidation(blk)
 	if err != nil {
 		blocklog.With().Error("failed to validate block", log.Err(err))
 		return false
@@ -113,7 +130,7 @@ func (bl *BlockListener) HandleNewBlock(blk *types.Block) bool {
 
 	blocklog.With().Info("finished syntactic validation adding block with txs")
 
-	if err := bl.AddBlockWithTxs(blk, txs, atxs); err != nil {
+	if err := bl.mp.AddBlockWithTxs(blk, txs, atxs); err != nil {
 		blocklog.With().Error("failed to add block to database", log.Err(err))
 		return false
 	}

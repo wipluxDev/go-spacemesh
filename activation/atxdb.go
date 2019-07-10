@@ -46,6 +46,7 @@ func (db *ActivationDb) ProcessAtx(atx *types.ActivationTx) {
 	eatx, _ := db.GetAtx(atx.Id())
 	if eatx != nil {
 		atx.Nipst = nil
+		db.log.Warning("Atx found in db %v, node: %v, layer: %v", atx.ShortId(), atx.NodeId.Key[:5], atx.PubLayerIdx)
 		return
 	}
 	epoch := atx.PubLayerIdx.GetEpoch(db.LayersPerEpoch)

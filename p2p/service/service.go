@@ -44,7 +44,6 @@ type DirectMessage interface {
 type GossipMessage interface {
 	Sender() p2pcrypto.PublicKey
 	Bytes() []byte
-	ValidationCompletedChan() chan MessageValidation
 	ReportValidation(protocol string)
 }
 

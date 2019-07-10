@@ -162,7 +162,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}
 	txbytes, _ := types.SignedTransactionAsBytes(tx)
 	path := "../tmp/test/state_" + time.Now().String()
-	suite.initMultipleInstances(5, path)
+	suite.initMultipleInstances(10, path)
 	for _, a := range suite.apps {
 		a.startServices()
 	}
@@ -170,7 +170,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	defer suite.gracefulShutdown()
 
 	_ = suite.apps[0].P2P.Broadcast(miner.IncomingTxProtocol, txbytes)
-	timeout := time.After(4.5 * 60 * time.Second)
+	timeout := time.After(30 * 60 * time.Second)
 
 	stickyClientsDone := 0
 loop:
@@ -231,7 +231,7 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 
 		count := 0
 		for _, ap := range suite.apps {
-			curNodeLastLayer := ap.blockListener.ValidatedLayer()
+			curNodeLastLayer := ap.mesh.ValidatedLayer()
 			if curNodeLastLayer < untilLayer {
 				log.Info("layer for %v was %v, want %v", ap.nodeId.Key, curNodeLastLayer, 8)
 			} else {
@@ -254,7 +254,7 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 		}
 
 		for i := types.LayerID(0); i <= untilLayer; i++ {
-			lyr, err := ap.blockListener.GetLayer(i)
+			lyr, err := ap.mesh.GetLayer(i)
 			if err != nil {
 				log.Error("ERROR: couldn't get a validated layer from db layer %v, %v", i, err)
 			}
@@ -263,7 +263,7 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 			}
 			epoch := lyr.Index().GetEpoch(uint16(ap.Config.LayersPerEpoch))
 			if _, ok := datamap[ap.nodeId.Key].atxPerEpoch[epoch]; !ok {
-				atxs, err := ap.blockListener.AtxDB.GetEpochAtxIds(epoch)
+				atxs, err := ap.mesh.AtxDB.GetEpochAtxIds(epoch)
 				if err != nil {
 					log.Error("ERROR: couldn't get atxs for passed epoch: %v, err: %v", epoch, err)
 				}

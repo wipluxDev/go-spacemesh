@@ -3,7 +3,6 @@ package p2p
 import (
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/p2pcrypto"
-	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"sync/atomic"
 )
 
@@ -25,7 +24,11 @@ func NewPeersImpl(snapshot *atomic.Value, exit chan struct{}, lg log.Log) *Peers
 	return &PeersImpl{snapshot: snapshot, Log: lg, exit: exit}
 }
 
-func NewPeers(s service.Service, lg log.Log) Peers {
+type peerProvider interface {
+	SubscribePeerEvents() (chan p2pcrypto.PublicKey, chan p2pcrypto.PublicKey)
+}
+
+func NewPeers(s peerProvider, lg log.Log) Peers {
 	value := atomic.Value{}
 	value.Store(make([]Peer, 0, 20))
 	pi := NewPeersImpl(&value, make(chan struct{}), lg)
