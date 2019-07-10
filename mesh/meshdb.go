@@ -276,7 +276,7 @@ func (m *MeshDB) getLayerMutex(index types.LayerID) *layerMutex {
 	return ll
 }
 
-func (m *MeshDB) writeTransactions(txs []*types.AddressableSignedTransaction) ([]types.TransactionId, error) {
+func (m *MeshDB) WriteTransactions(txs []*types.AddressableSignedTransaction) ([]types.TransactionId, error) {
 	txids := make([]types.TransactionId, 0, len(txs))
 	for _, t := range txs {
 		bytes, err := types.AddressableTransactionAsBytes(t)

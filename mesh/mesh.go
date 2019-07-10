@@ -312,7 +312,7 @@ func (m *Mesh) AddBlockWithTxs(blk *types.Block, txs []*types.AddressableSignedT
 		atxids = append(atxids, t.Id())
 	}
 
-	txids, err := m.writeTransactions(txs)
+	txids, err := m.WriteTransactions(txs)
 	if err != nil {
 		return fmt.Errorf("could not write transactions of block %v database %v", blk.ID(), err)
 	}

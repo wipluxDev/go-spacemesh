@@ -2,10 +2,14 @@ package sync
 
 import (
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/spacemeshos/go-spacemesh/activation"
 	"github.com/spacemeshos/go-spacemesh/address"
-	"github.com/spacemeshos/go-spacemesh/config"
+	threads "sync"
+	"time"
+
+	//"github.com/spacemeshos/go-spacemesh/config"
 	"github.com/spacemeshos/go-spacemesh/database"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/miner"
@@ -14,10 +18,10 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/spacemeshos/go-spacemesh/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	//"github.com/stretchr/testify/assert"
+	//"github.com/stretchr/testify/require"
 	"testing"
-	"time"
+	//"time"
 )
 
 type PeersMock struct {
@@ -299,18 +303,18 @@ func (m mockTxProcessor) ValidateTransactionSignature(tx *types.SerializableSign
 //	t.Log("done!")
 //}
 
-
-func gossipListenerFactory(serv service.Service, name string, layer types.LayerID) *BlockListener {
-	ch := make(chan types.LayerID, 1)
-	ch <- layer
-	l := log.New(name, "", "")
-	poetDb := activation.NewPoetDb(database.NewMemDatabase(), l.WithName("poetDb"))
-	blockValidator := NewBlockValidator(BlockEligibilityValidatorMock{})
-	msh := getMesh(memoryDB, name)
-	sync := NewSync(serv, getMesh(memoryDB, name), miner.NewTypesTransactionIdMemPool(), miner.NewTypesAtxIdMemPool(), mockTxProcessor{}, blockValidator, poetDb, conf, ch, layer, l)
-	nbl := NewBlockListener(serv, msh, sync, 2, log.New(name, "", ""))
-	return nbl
-}
+//
+//func gossipListenerFactory(serv service.Service, name string, layer types.LayerID) *BlockListener {
+//	ch := make(chan types.LayerID, 1)
+//	ch <- layer
+//	l := log.New(name, "", "")
+//	poetDb := activation.NewPoetDb(database.NewMemDatabase(), l.WithName("poetDb"))
+//	blockValidator := NewBlockValidator(BlockEligibilityValidatorMock{})
+//	msh := getMesh(memoryDB, name)
+//	sync := NewSync(serv, getMesh(memoryDB, name), miner.NewTypesTransactionIdMemPool(), miner.NewTypesAtxIdMemPool(), mockTxProcessor{}, blockValidator, poetDb, conf, ch, layer, l)
+//	nbl := NewBlockListener(serv, msh, sync, 2, log.New(name, "", ""))
+//	return nbl
+//}
 
 
 type mockP2P struct {
@@ -386,27 +390,87 @@ func TestBlockListener_ListenToGossipBlocks(t *testing.T) {
 	poetDb := activation.NewPoetDb(database.NewMemDatabase(), l.WithName("poetDb"))
 	blockValidator := NewBlockValidator(BlockEligibilityValidatorMock{})
 	msh := getMesh(memoryDB, name)
-	sync := NewSync(p2, getMesh(memoryDB, name), miner.NewTypesTransactionIdMemPool(), miner.NewTypesAtxIdMemPool(), mockTxProcessor{}, blockValidator, poetDb, conf, ch, layer, l)
+	sync := NewSync(p2, msh, miner.NewTypesTransactionIdMemPool(), miner.NewTypesAtxIdMemPool(), mockTxProcessor{}, blockValidator, poetDb, conf, ch, layer, l)
 	nbl := NewBlockListener(p2, msh, sync, 2, log.New(name, "", ""))
 
 
-	nbl.Start()
+	//nbl.Start()
+	maxtime := time.Duration(0)
+	numblocks := 30
+	numatx := 30
 
-	blk := types.NewExistingBlock(types.BlockID(uuid.New().ID()), 1, []byte("data1"))
-	tx := types.NewAddressableTx(0, address.BytesToAddress([]byte{0x01}), address.BytesToAddress([]byte{0x02}), 10, 10, 10)
-	atx := atx("asdfdsf")
-	//bl2.AddBlockWithTxs(blk, []*types.AddressableSignedTransaction{tx}, []*types.ActivationTx{atx})
+	lyrIdx := types.LayerID(1)
+	var lastlyrblocks []types.Block
 
-	mblk := types.Block{MiniBlock: types.MiniBlock{BlockHeader: blk.BlockHeader, TxIds: []types.TransactionId{types.GetTransactionId(tx.SerializableSignedTransaction)}, AtxIds: []types.AtxId{atx.Id()}}}
-	signer := signing.NewEdSigner()
-	mblk.Signature = signer.Sign(mblk.Bytes())
+	for {
+		var blocks []types.Block
+		for i := 0; i< numblocks; i++ {
+			blk := types.NewExistingBlock(types.BlockID(uuid.New().ID()), lyrIdx, []byte("data1"))
+			var atxs []types.AtxId
+			for i := 0; i < numatx; i++ {
 
-	data, err := types.InterfaceToBytes(&mblk)
-	require.NoError(t, err)
+				view := []types.BlockID{}
 
+				if lastlyrblocks != nil {
+					for _,v := range lastlyrblocks {
+						view = append(view, v.Id)
+					}
+				}
+
+				atx := atx(lyrIdx, RandStringRunes(10), view)
+				//if i%2 == 0 {
+				//	msh.ProcessAtx(atx)
+				//} else {
+					sync.atxpool.Put(atx.Id(), atx)
+				//}
+				atxs = append(atxs, atx.Id())
+			}
+
+			//tx := types.NewAddressableTx(0, address.BytesToAddress([]byte{0x01}), address.BytesToAddress([]byte{0x02}), 10, 10, 10)
+			//msh.WriteTransactions([]*types.AddressableSignedTransaction{tx})
+			//bl2.AddBlockWithTxs(blk, []*types.AddressableSignedTransaction{tx}, []*types.ActivationTx{atx})
+
+			mblk := types.Block{MiniBlock: types.MiniBlock{BlockHeader: blk.BlockHeader, AtxIds: atxs}}
+			if lastlyrblocks != nil {
+				for _, blk := range lastlyrblocks {
+					mblk.ViewEdges = append(mblk.ViewEdges, blk.Id)
+				}
+			}
+			signer := signing.NewEdSigner()
+			mblk.Signature = signer.Sign(mblk.Bytes())
+			blocks = append(blocks, mblk)
+		}
+		//data, err := types.InterfaceToBytes(&mblk)
+		//require.NoError(t, err)
+		//
+		//mych <- &p2pMsg{data: data}
+		var wg threads.WaitGroup
+		wg.Add(len(blocks))
+		for _, block := range blocks {
+			block := block
+			go func() {
+				start := time.Now()
+				nbl.HandleNewBlock(&block)
+				took := time.Now().Sub(start)
+				fmt.Printf("handled blk %v took %v \r\n", block.Id, took)
+				if took > maxtime {
+					maxtime = took
+
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+		lyrIdx++
+		lastlyrblocks = blocks
+
+		if lyrIdx == 10 {
+			break
+		}
+	}
+	time.Sleep(10*time.Second)
+	fmt.Println("max time took ", maxtime)
 	//err = n2.Broadcast(config.NewBlockProtocol, data)
-	assert.NoError(t, err)
-
 
 	//
 	//time.Sleep(3 * time.Second)

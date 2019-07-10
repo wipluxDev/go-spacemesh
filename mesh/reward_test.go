@@ -78,7 +78,7 @@ func addTransactionsWithGas(mesh *MeshDB, bl *types.Block, numOfTxs int, gasPric
 		totalRewards += gasPrice
 		txs = append(txs, tx)
 	}
-	mesh.writeTransactions(txs)
+	mesh.WriteTransactions(txs)
 	return totalRewards
 }
 
