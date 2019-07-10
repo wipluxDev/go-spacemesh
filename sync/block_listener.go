@@ -93,8 +93,12 @@ func (bl *BlockListener) ListenToGossipBlocks() {
 func (bl *BlockListener) HandleNewBlock(blk *types.Block) bool {
 
 	blocklog := bl.Log.WithFields(log.Uint64("block_id", uint64(blk.Id)))
+	atxstring := ""
+	for _, atx := range blk.AtxIds {
+		atxstring += atx.ShortId() + ", "
+	}
 
-	blocklog.With().Info("got new block",  log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)))
+	blocklog.With().Info("got new block",  log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)), log.String("atx_list", atxstring))
 	//check if known
 
 	if _, err := bl.GetBlock(blk.Id); err == nil {
