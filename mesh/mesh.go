@@ -302,7 +302,14 @@ func (m *Mesh) AddBlock(blk *types.Block) error {
 }
 
 func (m *Mesh) AddBlockWithTxs(blk *types.Block, txs []*types.AddressableSignedTransaction, atxs []*types.ActivationTx) error {
-	m.Info("add block %d, unprocessed atxs %v, unprocessed txs %v", blk.ID(), atxs, txs)
+	
+	atxstring :=  "["
+	for _, atx := range atxs {
+		atxstring += atx.ShortId() + ", "
+	}
+	atxstring += "]"
+
+	m.Info("add block %d, unprocessed atxs %v, unprocessed txs %v", blk.ID(), atxstring, txs)
 
 	atxids := make([]types.AtxId, 0, len(atxs))
 	for _, t := range atxs {
