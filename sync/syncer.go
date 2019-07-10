@@ -370,7 +370,7 @@ func (s *Syncer) DataAvailabilty(blk *types.Block) ([]*types.AddressableSignedTr
 	cache := make(map[types.AtxId]struct{}, len(atxs))
 	for _, mis := range atxs {
 		if _, ok := cache[mis.Id()]; ok {
-			blocklog.Info("found duplicated atx %v", mis.ShortId())
+			blocklog.Info("aaa found duplicated atx %v", mis.ShortId())
 		} else {
 			cache[mis.Id()] = struct{}{}
 		}
@@ -536,8 +536,8 @@ func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.A
 					continue
 				}
 				s.Info("atx %v is syntactically valid, adding to unprocessed map. blkId %v", atx.ShortId(), blkId)
-				//tmp := atx
-				unprocessedAtxs[atx.Id()] = &atx //&tmp
+				tmp := atx
+				unprocessedAtxs[atx.Id()] = &tmp
 			}
 		}
 	}
