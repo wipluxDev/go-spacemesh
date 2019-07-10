@@ -363,7 +363,15 @@ func (s *Syncer) DataAvailabilty(blk *types.Block) ([]*types.AddressableSignedTr
 	}
 
 
-	blocklog.Info("fetched all atxs (total %v, unprocessed %v) for block ", len(blk.AtxIds), len(atxs))
+	totstring := ""
+	for _, mis := range blk.AtxIds {
+		totstring += mis.ShortId() + ", "
+	}
+	atxsstring := ""
+	for _, mis := range atxs {
+		atxsstring += mis.ShortId() + ", "
+	}
+	blocklog.Info("fetched all atxs (total %v, unprocessed %v) for block ", totstring, atxsstring)
 	return txs, atxs, nil
 }
 
@@ -525,8 +533,8 @@ func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.A
 					s.Warning("atx %v not valid %v (found in block %v)", atx.ShortId(), err, blkId)
 					continue
 				}
-				tmp := atx
-				unprocessedAtxs[atx.Id()] = &tmp
+				s.Info("atx %v is syntactically valid, adding to unprocessed map. blkId %v", atx.ShortId(), blkId)
+				unprocessedAtxs[atx.Id()] = &atx
 			}
 		}
 	}
@@ -534,6 +542,7 @@ func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.A
 	atxs := make([]*types.ActivationTx, 0, len(atxIds))
 	for _, id := range atxIds {
 		if tx, ok := unprocessedAtxs[id]; ok {
+			s.Info("adding atx %v to result. blkId %v", tx.ShortId(), blkId)
 			atxs = append(atxs, tx)
 		} else if _, ok := dbAtxs[id]; ok {
 			continue
@@ -541,6 +550,12 @@ func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.A
 			return nil, errors.New(fmt.Sprintf("could not fetch atx %v (found in block %v)", id.ShortId(), blkId))
 		}
 	}
+
+	atxstring := ""
+	for _, mis := range atxs {
+		atxstring += mis.ShortId() + ", "
+	}
+	s.Info("done syncAtx, blkId %v, returning %s ", blkId, atxstring)
 	return atxs, nil
 }
 
