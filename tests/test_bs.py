@@ -426,6 +426,46 @@ def test_mining(setup_network):
 
     validate_hare(current_index, ns)  # validate hare
 
+def test_longevity_mining(setup_network):
+    ns = testconfig['namespace']
+
+    # choose client to run on
+    client_ip = setup_network.clients.pods[0]['pod_ip']
+
+    api = 'v1/nonce'
+    data = '{"address":"1"}'
+    print("checking nonce")
+    out = api_call(client_ip, data, api, testconfig['namespace'])
+    # assert "{'value': '0'}" in out
+    # print("nonce ok")
+
+    api = 'v1/submittransaction'
+    txGen = tx_generator.TxGenerator()
+    txBytes = txGen.generate("0000000000000000000000000000000000002222", 0, 246, 642, 100)
+    data = '{"tx":'+ str(list(txBytes)) + '}'
+    print("submitting transaction")
+    out = api_call(client_ip, data, api, testconfig['namespace'])
+    print(out)
+    assert "{'value': 'ok'}" in out
+    print("submit transaction ok")
+    print("wait for confirmation ")
+    api = 'v1/balance'
+    data = '{"address":"0000000000000000000000000000000000002222"}'
+    end = start = time.time()
+
+    layer_avg_size = testconfig['client']['args']['layer-average-size']
+    layers_per_epoch = int(testconfig['client']['args']['layers-per-epoch'])
+    # check only third epoch
+    epochs = 3
+    # print("test took {:.3f} seconds ".format(end - start))
+    total_pods = len(setup_network.clients.pods) + len(setup_network.bootstrap.pods)
+    while True:
+        epoch_layer = epochs*layers_per_epoch
+        queries.wait_for_latest_layer(testconfig["namespace"], epoch_layer)
+        analyse.analyze_mining(testconfig['namespace'], epoch_layer, layers_per_epoch, layer_avg_size, total_pods)
+        validate_hare(current_index, ns)  # validate hare
+        epochs+=1
+        print("I WENT THROUGH LAYER {0} AND IT WAS COOL ############".format(epoch_layer))
 
 ''' todo: when atx flow stabilized re enable this test
 def test_atxs_nodes_up(setup_bootstrap, setup_clients, add_curl, wait_genesis, setup_poet, setup_oracle):
