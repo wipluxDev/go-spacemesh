@@ -298,11 +298,11 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 
 	db, err := database.NewLDBDatabase(dbStorepath, 0, 0, lg.WithName("stateDbStore"))
 	if err != nil {
-		return err
+		return fmt.Errorf("err creating stateDB err=%v", err)
 	}
 	st, err := state.New(common.Hash{}, state.NewDatabase(db)) //todo: we probably should load DB with latest hash
 	if err != nil {
-		return err
+		return  fmt.Errorf("err creating state err=%v", err)
 	}
 	rng := rand.New(mt19937.New())
 	processor := state.NewTransactionProcessor(rng, st, app.Config.GAS, lg.WithName("state"))
@@ -310,30 +310,30 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 	coinToss := consensus.WeakCoin{}
 	gTime, err := time.Parse(time.RFC3339, app.Config.GenesisTime)
 	if err != nil {
-		return err
+		return  fmt.Errorf("err parsing gensistime err=%v", err)
 	}
 	ld := time.Duration(app.Config.LayerDurationSec) * time.Second
 	clock := timesync.NewTicker(timesync.RealClock{}, ld, gTime)
 
 	atxdbstore, err := database.NewLDBDatabase(dbStorepath+"atx", 0, 0, lg.WithName("atxDbStore"))
 	if err != nil {
-		return err
+		return  fmt.Errorf("err creating atxdb  err=%v", err)
 	}
 
 	nipstStore, err := database.NewLDBDatabase(dbStorepath+"nipst", 0, 0, lg.WithName("nipstDbStore"))
 	if err != nil {
-		return err
+		return  fmt.Errorf("err creating nipstdb err=%v", err)
 	}
 
 	poetDbStore, err := database.NewLDBDatabase(dbStorepath+"poet", 0, 0, lg.WithName("poetDbStore"))
 	if err != nil {
-		return err
+		return  fmt.Errorf("err creating poetdb err=%v", err)
 	}
 
 	//todo: put in config
 	iddbstore, err := database.NewLDBDatabase(dbStorepath+"ids", 0, 0, lg.WithName("stateDbStore"))
 	if err != nil {
-		return err
+		return  fmt.Errorf("err creating identity db err=%v", err)
 	}
 	idStore := activation.NewIdentityStore(iddbstore)
 	poetDb := activation.NewPoetDb(poetDbStore, lg.WithName("poetDb"))
@@ -411,11 +411,11 @@ func (app *SpacemeshApp) startServices() {
 	app.syncer.Start()
 	err := app.hare.Start()
 	if err != nil {
-		log.Panic("cannot start hare")
+		log.Panic("cannot start hare %v", err)
 	}
 	err = app.blockProducer.Start()
 	if err != nil {
-		log.Panic("cannot start block producer")
+		log.Panic("cannot start block producer %v", err)
 	}
 	app.poetListener.Start()
 	app.atxBuilder.Start()
