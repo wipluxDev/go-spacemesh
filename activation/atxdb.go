@@ -68,6 +68,80 @@ func (db *ActivationDb) ProcessAtx(atx *types.ActivationTx) {
 	}
 }
 
+var AlreadyExistErr = errors.New("ALREADY_EXIST")
+
+func (db *ActivationDb) ProcessAtxs(atxs []*types.ActivationTx) ([]types.AtxId, []error) {
+	var errors []error
+	var valids []int
+
+	errorchan := make(chan error, len(atxs))
+	validchan := make(chan int, len(atxs))
+
+	for i, atx := range atxs {
+		atx := atx
+		i := i
+		go func () {
+			eatx, _ := db.GetAtx(atx.Id())
+			if eatx != nil {
+				atx.Nipst = nil // todo: why ?
+				db.log.Warning("Atx found in db %v, node: %v, layer: %v", atx.ShortId(), atx.NodeId.Key[:5], atx.PubLayerIdx)
+				errorchan <- AlreadyExistErr
+				return
+			}
+
+			epoch := atx.PubLayerIdx.GetEpoch(db.LayersPerEpoch)
+			db.log.Info("processing atx id %v, pub-epoch %v node: %v layer %v", atx.ShortId(), epoch, atx.NodeId.Key[:5], atx.PubLayerIdx)
+			err := db.ContextuallyValidateAtx(atx)
+			if err != nil {
+				errors = append(errors, err)
+				db.log.Error("ATX %v failed contextual validation: %v", atx.ShortId(), err)
+				errorchan <- err
+				return
+			} else {
+				db.log.Info("ATX %v is valid", atx.ShortId())
+			}
+
+			validchan <- i
+		}()
+	}
+
+	for i := 0; i < len(atxs); i++ {
+		select {
+		case err := <-errorchan:
+			errors = append(errors, err)
+		case valid := <-validchan:
+			valids = append(valids, valid)
+		}
+	}
+
+
+
+	db.processAtxMutex.Lock()
+	defer db.processAtxMutex.Unlock()
+	var ids []types.AtxId
+
+	for _, valid := range valids {
+		atx := atxs[valid]
+		epoch := atx.PubLayerIdx.GetEpoch(db.LayersPerEpoch)
+
+		err := db.StoreAtx(epoch, atx)
+		if err != nil {
+			errors = append(errors, err)
+			db.log.Error("cannot store atx: %v", atx)
+		}
+
+		err = db.ids.StoreNodeIdentity(atx.NodeId)
+		if err != nil {
+			db.log.Error("cannot store node identity: %v err=%v", atx.NodeId, err)
+		}
+
+		ids = append(ids, atx.Id())
+
+	}
+
+	return ids, errors
+}
+
 // CalcActiveSetFromView traverses the view found in a - the activation tx and counts number of active ids published
 // in the epoch prior to the epoch that a was published at, this number is the number of active ids in the next epoch
 // the function returns error if the view is not found

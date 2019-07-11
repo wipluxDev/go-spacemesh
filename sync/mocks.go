@@ -100,6 +100,16 @@ func (t *AtxDbMock) ProcessAtx(atx *types.ActivationTx) {
 	t.nipsts[atx.Id()] = atx.Nipst
 }
 
+func (t *AtxDbMock) ProcessAtxs(atxs []*types.ActivationTx) ([]types.AtxId, []error) {
+	var ids []types.AtxId
+	for _, atx := range atxs {
+		t.db[atx.Id()] = atx
+		t.nipsts[atx.Id()] = atx.Nipst
+		ids = append(ids, atx.Id())
+	}
+	return ids, nil
+}
+
 func (*AtxDbMock) IsIdentityActive(edId string, layer types.LayerID) (bool, types.AtxId, error) {
 	return true, *types.EmptyAtxId, nil
 }

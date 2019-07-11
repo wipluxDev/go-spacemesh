@@ -396,35 +396,37 @@ func TestBlockListener_ListenToGossipBlocks(t *testing.T) {
 
 	//nbl.Start()
 	maxtime := time.Duration(0)
-	numblocks := 30
-	numatx := 30
+	numblocks := 100
+	numatx := 100
 
 	lyrIdx := types.LayerID(1)
 	var lastlyrblocks []types.Block
 
 	for {
+
+		var atxs []types.AtxId
+		for i := 0; i < numatx; i++ {
+
+			view := []types.BlockID{}
+
+			if lastlyrblocks != nil {
+				for _,v := range lastlyrblocks {
+					view = append(view, v.Id)
+				}
+			}
+
+			atx := atx(lyrIdx, RandStringRunes(10), view)
+			//if i%2 == 0 {
+			//	msh.ProcessAtx(atx)
+			//} else {
+			sync.atxpool.Put(atx.Id(), atx)
+			//}
+			atxs = append(atxs, atx.Id())
+		}
+
 		var blocks []types.Block
 		for i := 0; i< numblocks; i++ {
 			blk := types.NewExistingBlock(types.BlockID(uuid.New().ID()), lyrIdx, []byte("data1"))
-			var atxs []types.AtxId
-			for i := 0; i < numatx; i++ {
-
-				view := []types.BlockID{}
-
-				if lastlyrblocks != nil {
-					for _,v := range lastlyrblocks {
-						view = append(view, v.Id)
-					}
-				}
-
-				atx := atx(lyrIdx, RandStringRunes(10), view)
-				//if i%2 == 0 {
-				//	msh.ProcessAtx(atx)
-				//} else {
-					sync.atxpool.Put(atx.Id(), atx)
-				//}
-				atxs = append(atxs, atx.Id())
-			}
 
 			//tx := types.NewAddressableTx(0, address.BytesToAddress([]byte{0x01}), address.BytesToAddress([]byte{0x02}), 10, 10, 10)
 			//msh.WriteTransactions([]*types.AddressableSignedTransaction{tx})
@@ -455,7 +457,6 @@ func TestBlockListener_ListenToGossipBlocks(t *testing.T) {
 				fmt.Printf("handled blk %v took %v \r\n", block.Id, took)
 				if took > maxtime {
 					maxtime = took
-
 				}
 				wg.Done()
 			}()
@@ -468,7 +469,7 @@ func TestBlockListener_ListenToGossipBlocks(t *testing.T) {
 			break
 		}
 	}
-	time.Sleep(10*time.Second)
+	//time.Sleep(10*time.Second)
 	fmt.Println("max time took ", maxtime)
 	//err = n2.Broadcast(config.NewBlockProtocol, data)
 
