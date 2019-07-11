@@ -14,8 +14,11 @@ import (
 
 // TODO : implement delays?
 
+
 // Simulator is a p2p node factory and message bridge
 type Simulator struct {
+	log.Log
+
 	io.Closer
 	mutex                 sync.RWMutex
 	protocolDirectHandler map[string]map[string]chan DirectMessage // maps peerPubkey -> protocol -> direct protocol handler
@@ -32,6 +35,7 @@ var _ Service = new(Node)
 // Node is a simulated p2p node that can be used as a p2p service
 type Node struct {
 	sim *Simulator
+	log.Log
 	*node.NodeInfo
 	sndDelay      uint32
 	rcvDelay      uint32
@@ -41,11 +45,16 @@ type Node struct {
 // New Creates a p2p simulation by providing nodes as p2p services and bridge them.
 func NewSimulator() *Simulator {
 	s := &Simulator{
+		Log: log.NewDefault("sim").WithOptions(log.Nop),
 		protocolDirectHandler: make(map[string]map[string]chan DirectMessage),
 		protocolGossipHandler: make(map[string]map[string]chan GossipMessage),
 		nodes:                 make(map[string]*Node),
 	}
 	return s
+}
+
+func (s *Simulator) SetLogger(l log.Log) {
+	s.Log = l
 }
 
 func (s *Simulator) SubscribeToPeerEvents(myid p2pcrypto.Key) (chan p2pcrypto.PublicKey, chan p2pcrypto.PublicKey) {
@@ -87,12 +96,15 @@ func (s *Simulator) publishDelPeer(peer p2pcrypto.PublicKey) {
 }
 
 func (s *Simulator) createdNode(n *Node) {
+	n.Log = s.Log.WithName(n.ID.String()[:5])
+	n.Log.Info("Added new node to sim")
 	s.mutex.Lock()
 	s.protocolDirectHandler[n.PublicKey().String()] = make(map[string]chan DirectMessage)
 	s.protocolGossipHandler[n.PublicKey().String()] = make(map[string]chan GossipMessage)
 	s.nodes[n.PublicKey().String()] = n
 	s.mutex.Unlock()
 	s.publishNewPeer(n.PublicKey())
+	n.Log.Info("published to all peers")
 }
 
 func (s *Simulator) NewFaulty(isRandBehaviour bool, maxBroadcastDelaySec uint32, maxReceiveDelaySec uint32) *Node {
@@ -212,6 +224,7 @@ func (sn *Node) ProcessDirectProtocolMessage(sender p2pcrypto.PublicKey, protoco
 
 // ProcessGossipProtocolMessage
 func (sn *Node) ProcessGossipProtocolMessage(sender p2pcrypto.PublicKey, protocol string, data Data, validationCompletedChan chan MessageValidation) error {
+	sn.Log.Info("Processing gossip message of type %v", protocol)
 	sn.sim.mutex.RLock()
 	c, ok := sn.sim.protocolGossipHandler[sn.PublicKey().String()][protocol]
 	sn.sim.mutex.RUnlock()
@@ -219,6 +232,7 @@ func (sn *Node) ProcessGossipProtocolMessage(sender p2pcrypto.PublicKey, protoco
 		return errors.New("Unknown protocol")
 	}
 	c <- simGossipMessage{sender, data, validationCompletedChan}
+	sn.Log.Info("Finished sending message on chan %v", protocol)
 	return nil
 }
 
@@ -259,6 +273,7 @@ func (sn *Node) sleep(delay uint32) {
 // Broadcast
 func (sn *Node) Broadcast(protocol string, payload []byte) error {
 	go func() {
+		sn.Log.Info("Starting to broadcast message of %v", protocol)
 		sn.sleep(sn.sndDelay)
 		sn.sim.mutex.RLock()
 		var mychan chan GossipMessage
@@ -283,9 +298,14 @@ func (sn *Node) Broadcast(protocol string, payload []byte) error {
 			mychan <- simGossipMessage{sn.NodeInfo.PublicKey(), DataBytes{Payload: payload}, nil}
 		}
 
+		sn.Log.Info("Sent to myself message of type %v", protocol)
+
+
 		for _, c := range sendees {
 			c <- simGossipMessage{sn.NodeInfo.PublicKey(), DataBytes{Payload: payload}, nil}
 		}
+
+		sn.Log.Info("Sent to all the other nodes msg of %v", protocol)
 
 		log.Debug("%v >> All ( Gossip ) (%v)", sn.NodeInfo.PublicKey(), payload)
 	}()
