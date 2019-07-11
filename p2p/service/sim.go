@@ -14,7 +14,6 @@ import (
 
 // TODO : implement delays?
 
-
 // Simulator is a p2p node factory and message bridge
 type Simulator struct {
 	log.Log
@@ -45,7 +44,7 @@ type Node struct {
 // New Creates a p2p simulation by providing nodes as p2p services and bridge them.
 func NewSimulator() *Simulator {
 	s := &Simulator{
-		Log: log.NewDefault("sim").WithOptions(log.Nop),
+		Log:                   log.NewDefault("sim").WithOptions(log.Nop),
 		protocolDirectHandler: make(map[string]map[string]chan DirectMessage),
 		protocolGossipHandler: make(map[string]map[string]chan GossipMessage),
 		nodes:                 make(map[string]*Node),
@@ -299,7 +298,6 @@ func (sn *Node) Broadcast(protocol string, payload []byte) error {
 		}
 
 		sn.Log.Info("Sent to myself message of type %v", protocol)
-
 
 		for _, c := range sendees {
 			c <- simGossipMessage{sn.NodeInfo.PublicKey(), DataBytes{Payload: payload}, nil}
