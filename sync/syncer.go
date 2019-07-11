@@ -521,7 +521,7 @@ func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.A
 		for _, mis := range missingInDb {
 			atxstring += mis.ShortId() + ", "
 		}
-		s.Info("about to sync atxs : %v for block %v", atxstring ,blkId)
+		s.Info("about to sync atxs : %v for block %v", atxstring, blkId)
 		output := s.fetchWithFactory(NewNeighborhoodWorker(s, 1, ATxReqFactory(missingInDb)))
 		for out := range output {
 			atxs := out.([]types.ActivationTx)
@@ -529,7 +529,7 @@ func (s *Syncer) syncAtxs(blkId types.BlockID, atxIds []types.AtxId) ([]*types.A
 			for _, atx := range atxs {
 				gotatxstring += atx.ShortId() + ", "
 			}
-			s.Info("got atxs from sync : %v for block %v", gotatxstring ,blkId)
+			s.Info("got atxs from sync : %v for block %v", gotatxstring, blkId)
 			for _, atx := range atxs {
 				if err := s.SyntacticallyValidateAtx(&atx); err != nil {
 					s.Warning("atx %v not valid %v (found in block %v)", atx.ShortId(), err, blkId)

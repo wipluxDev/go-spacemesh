@@ -214,7 +214,7 @@ loop:
 		}
 	}
 	for i := types.LayerID(3); true; i++ {
-		suite.validateBlocksAndATXs(i*4-1)
+		suite.validateBlocksAndATXs(i*4 - 1)
 		fmt.Printf("PASSED THAT SHITTTTTTT LAYER %v \r\n", i*4)
 	}
 

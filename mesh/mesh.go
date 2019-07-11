@@ -302,8 +302,8 @@ func (m *Mesh) AddBlock(blk *types.Block) error {
 }
 
 func (m *Mesh) AddBlockWithTxs(blk *types.Block, txs []*types.AddressableSignedTransaction, atxs []*types.ActivationTx) error {
-	
-	atxstring :=  "["
+
+	atxstring := "["
 	for _, atx := range atxs {
 		atxstring += atx.ShortId() + ", "
 	}
