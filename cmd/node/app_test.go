@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"github.com/spacemeshos/go-spacemesh/address"
 	"github.com/spacemeshos/go-spacemesh/amcl/BLS381"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/sync/errgroup"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -92,53 +94,74 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 	poetClient, err := NewRPCPoetHarnessClient()
 	r.NoError(err)
 	suite.poetCleanup = poetClient.CleanUp
+	var rngmtx sync.Mutex
 	rng := BLS381.DefaultSeed()
+	genesisTime := time.Now().Add(time.Second * 10)
+
+	var mtx sync.Mutex
+
+	g, _ := errgroup.WithContext(context.Background())
+
 	for i := 0; i < numOfInstances; i++ {
-		smApp := NewSpacemeshApp()
+		runningName := runningName + rune(i)
+		g.Go(func() error {
+			smApp := NewSpacemeshApp()
 
-		smApp.Config.POST = nipst.DefaultConfig()
-		smApp.Config.POST.Difficulty = 5
-		smApp.Config.POST.NumProvenLabels = 10
-		smApp.Config.POST.SpacePerUnit = 1 << 10 // 1KB.
-		smApp.Config.POST.FileSize = 1 << 10     // 1KB.
+			smApp.Config.POST = nipst.DefaultConfig()
+			smApp.Config.POST.Difficulty = 5
+			smApp.Config.POST.NumProvenLabels = 10
+			smApp.Config.POST.SpacePerUnit = 1 << 10 // 1KB.
+			smApp.Config.POST.FileSize = 1 << 10     // 1KB.
 
-		smApp.Config.HARE.N = numOfInstances
-		smApp.Config.HARE.F = numOfInstances / 2
-		smApp.Config.HARE.RoundDuration = 25
-		smApp.Config.HARE.WakeupDelta = 25
-		smApp.Config.HARE.ExpectedLeaders = 5
-		smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
-		smApp.Config.LayerAvgSize = numOfInstances
-		smApp.Config.LayersPerEpoch = 4
-		smApp.Config.LayerDurationSec = 180
+			smApp.Config.HARE.N = numOfInstances
+			smApp.Config.HARE.F = numOfInstances / 2
+			smApp.Config.HARE.RoundDuration = 25
+			smApp.Config.HARE.WakeupDelta = 25
+			smApp.Config.HARE.ExpectedLeaders = 5
+			smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
+			smApp.Config.LayerAvgSize = numOfInstances
+			smApp.Config.LayersPerEpoch = 4
+			smApp.Config.LayerDurationSec = 180
+			smApp.Config.GenesisTime = genesisTime.Format(time.RFC3339)
 
-		edSgn := signing.NewEdSigner()
-		pub := edSgn.PublicKey()
+			edSgn := signing.NewEdSigner()
+			pub := edSgn.PublicKey()
 
-		r.NoError(err)
-		vrfPriv, vrfPub := BLS381.GenKeyPair(rng)
-		vrfSigner := BLS381.NewBlsSigner(vrfPriv)
-		nodeID := types.NodeId{Key: pub.String(), VRFPublicKey: vrfPub}
+			r.NoError(err)
+			rngmtx.Lock()
+			vrfPriv, vrfPub := BLS381.GenKeyPair(rng)
+			vrfSigner := BLS381.NewBlsSigner(vrfPriv)
+			rngmtx.Unlock()
+			nodeID := types.NodeId{Key: pub.String(), VRFPublicKey: vrfPub}
 
-		swarm := net.NewNode()
-		dbStorepath := storeFormat + string(runningName)
+			swarm := net.NewNode()
+			fmt.Println("DB STORINGGG      ", runningName)
+			dbStorepath := storeFormat + string(runningName)
 
-		hareOracle := oracle.NewLocalOracle(rolacle, numOfInstances, nodeID)
-		hareOracle.Register(true, pub.String())
+			hareOracle := oracle.NewLocalOracle(rolacle, numOfInstances, nodeID)
+			hareOracle.Register(true, pub.String())
 
-		layerSize := numOfInstances
+			layerSize := numOfInstances
 
-		postClient := nipst.NewPostClient(&smApp.Config.POST)
+			postClient := nipst.NewPostClient(&smApp.Config.POST)
 
-		err = smApp.initServices(nodeID, swarm, dbStorepath, edSgn, false, hareOracle, uint32(layerSize), postClient, poetClient, vrfSigner, uint16(smApp.Config.LayersPerEpoch))
-		r.NoError(err)
-		smApp.setupGenesis()
-
-		suite.apps = append(suite.apps, smApp)
-		suite.dbs = append(suite.dbs, dbStorepath)
-		runningName++
+			err = smApp.initServices(nodeID, swarm, dbStorepath, edSgn, false, hareOracle, uint32(layerSize), postClient, poetClient, vrfSigner, uint16(smApp.Config.LayersPerEpoch))
+			if err != nil {
+				return err
+			}
+			smApp.setupGenesis()
+			mtx.Lock()
+			suite.apps = append(suite.apps, smApp)
+			suite.dbs = append(suite.dbs, dbStorepath)
+			mtx.Unlock()
+			log.Info("done with %v", nodeID.Key)
+			return nil
+		})
 	}
+	err = g.Wait()
+	r.NoError(err)
 	activateGrpcServer(suite.apps[0])
+	log.Info("Initialized all instances")
 }
 
 func activateGrpcServer(smApp *SpacemeshApp) {
@@ -163,10 +186,18 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}
 	txbytes, _ := types.SignedTransactionAsBytes(tx)
 	path := "../tmp/test/state_" + time.Now().String()
-	suite.initMultipleInstances(40, path)
+	suite.initMultipleInstances(60, path)
+	g, _ := errgroup.WithContext(context.Background())
 	for _, a := range suite.apps {
-		a.startServices()
+		a := a
+		g.Go(func() error {
+			a.startServices()
+			return nil
+		})
 	}
+	g.Wait()
+
+	log.Info("Started all instances")
 
 	defer suite.gracefulShutdown()
 
