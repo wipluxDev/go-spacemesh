@@ -7,7 +7,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"github.com/spacemeshos/go-spacemesh/timesync"
 	"github.com/spacemeshos/go-spacemesh/types"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -18,7 +17,6 @@ type BlockListener struct {
 	*Syncer
 	BlockValidator
 	log.Log
-	wg                   sync.WaitGroup
 	bufferSize           int
 	semaphore            chan struct{}
 	receivedGossipBlocks chan service.GossipMessage
@@ -34,7 +32,6 @@ type TickProvider interface {
 func (bl *BlockListener) Close() {
 	close(bl.exit)
 	bl.Info("block listener closing, waiting for gorutines")
-	bl.wg.Wait()
 	bl.Syncer.Close()
 	bl.Info("block listener closed")
 }
@@ -67,24 +64,20 @@ func (bl *BlockListener) ListenToGossipBlocks() {
 				bl.Info("ignoring gossip blocks - not synced yet")
 				break
 			}
-			bl.wg.Add(1)
-			go func() {
-				if data == nil {
-					bl.Error("got empty message while listening to gossip blocks")
-					return
-				}
-				var blk types.Block
-				err := types.BytesToInterface(data.Bytes(), &blk)
-				if err != nil {
-					bl.Error("received invalid block %v", data.Bytes(), err)
-					return
-				}
+			if data == nil {
+				bl.Error("got empty message while listening to gossip blocks")
+				return
+			}
+			var blk types.Block
+			err := types.BytesToInterface(data.Bytes(), &blk)
+			if err != nil {
+				bl.Error("received invalid block %v", data.Bytes(), err)
+				return
+			}
 
-				if bl.HandleNewBlock(&blk) {
-					data.ReportValidation(config.NewBlockProtocol)
-				}
-				bl.wg.Done()
-			}()
+			if bl.HandleNewBlock(&blk) {
+				data.ReportValidation(config.NewBlockProtocol)
+			}
 
 		}
 	}
