@@ -95,7 +95,7 @@ func (s *Simulator) publishDelPeer(peer p2pcrypto.PublicKey) {
 }
 
 func (s *Simulator) createdNode(n *Node) {
-	n.Log = s.Log.WithName(n.ID.String()[:5])
+	n.Log = s.Log.WithName(n.ID.String()[:5]).WithOptions(log.Nop)
 	n.Log.Info("Added new node to sim")
 	s.mutex.Lock()
 	s.protocolDirectHandler[n.PublicKey().String()] = make(map[string]chan DirectMessage)
@@ -193,6 +193,10 @@ func (sm simGossipMessage) ReportValidation(protocol string) {
 	}
 }
 
+func (sn *Node) SetLogger(log2 log.Log) {
+	sn.Log = log2
+}
+
 func (sn *Node) Start() error {
 	// on simulation this doesn't really matter yet.
 	return nil
@@ -274,7 +278,10 @@ func (sn *Node) sleep(delay uint32) {
 // Broadcast
 func (sn *Node) Broadcast(protocol string, payload []byte) error {
 	go func() {
-		sn.Log.Info("Starting to broadcast message of %v", protocol)
+		ispoet := protocol == "PoetProof"
+		if !ispoet {
+			sn.Log.Info("Starting to broadcast message of %v", protocol)
+		}
 		sn.sleep(sn.sndDelay)
 		sn.sim.mutex.RLock()
 		var mychan chan GossipMessage
@@ -299,14 +306,15 @@ func (sn *Node) Broadcast(protocol string, payload []byte) error {
 			mychan <- simGossipMessage{sn.NodeInfo.PublicKey(), DataBytes{Payload: payload}, nil}
 		}
 
-		sn.Log.Info("Sent to myself message of type %v", protocol)
-
+		if !ispoet {
+			sn.Log.Info("Sent to myself message of type %v", protocol)
+		}
 		for _, c := range sendees {
 			c <- simGossipMessage{sn.NodeInfo.PublicKey(), DataBytes{Payload: payload}, nil}
 		}
-
-		sn.Log.Info("Sent to all the other nodes msg of %v", protocol)
-
+		if !ispoet {
+			sn.Log.Info("Sent to all the other nodes msg of %v", protocol)
+		}
 		log.Debug("%v >> All ( Gossip ) (%v)", sn.NodeInfo.PublicKey(), payload)
 	}()
 	return nil

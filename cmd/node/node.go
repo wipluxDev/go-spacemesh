@@ -292,7 +292,7 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 	name := nodeID.ShortString()
 
 	lg := log.NewDefault(name).WithFields(log.String("nodeID", name))
-	app.log = lg.WithName("app")
+	app.log = lg
 
 	postClient.SetLogger(lg.WithName("post"))
 
