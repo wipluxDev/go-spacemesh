@@ -116,13 +116,13 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 
 			smApp.Config.HARE.N = numOfInstances
 			smApp.Config.HARE.F = numOfInstances / 2
-			smApp.Config.HARE.RoundDuration = 10
-			smApp.Config.HARE.WakeupDelta = 10
+			smApp.Config.HARE.RoundDuration = 25
+			smApp.Config.HARE.WakeupDelta = 30
 			smApp.Config.HARE.ExpectedLeaders = 15
 			smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
 			smApp.Config.LayerAvgSize = numOfInstances
 			smApp.Config.LayersPerEpoch = 4
-			smApp.Config.LayerDurationSec = 60
+			smApp.Config.LayerDurationSec = 180
 			smApp.Config.GenesisTime = genesisTime.Format(time.RFC3339)
 
 			edSgn := signing.NewEdSigner()
@@ -245,10 +245,10 @@ loop:
 			time.Sleep(30 * time.Second)
 		}
 	}
-	//for i := types.LayerID(3); true; i++ {
-		suite.validateBlocksAndATXs(3*4 - 1)
-		fmt.Printf("PASSED THAT SHITTTTTTT LAYER %v \r\n", 3*4)
-	//}
+	for i := types.LayerID(3); true; i++ {
+		suite.validateBlocksAndATXs(i*4 - 1)
+		fmt.Printf("PASSED THAT SHITTTTTTT LAYER %v \r\n", i*4)
+	}
 
 }
 
