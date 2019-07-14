@@ -98,7 +98,7 @@ func (bl *BlockListener) HandleNewBlock(blk *types.Block) bool {
 		atxstring += atx.ShortId() + ", "
 	}
 
-	blocklog.With().Info("got new block",  log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)), log.String("atx_list", atxstring))
+	blocklog.With().Info("got new block", log.Uint64("layer_id", uint64(blk.LayerIndex))  ,log.Int("txs", len(blk.TxIds)), log.Int("atxs", len(blk.AtxIds)), log.String("atx_list", atxstring))
 	//check if known
 
 	if _, err := bl.GetBlock(blk.Id); err == nil {
