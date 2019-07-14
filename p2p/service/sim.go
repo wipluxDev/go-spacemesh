@@ -269,6 +269,8 @@ func (sn *Node) sleep(delay uint32) {
 	time.Sleep(time.Second * time.Duration(ranDelay))
 }
 
+
+
 // Broadcast
 func (sn *Node) Broadcast(protocol string, payload []byte) error {
 	go func() {
@@ -325,7 +327,7 @@ func (sn *Node) RegisterDirectProtocol(protocol string) chan DirectMessage {
 
 // RegisterGossipProtocol creates and returns a channel for a given gossip based protocol.
 func (sn *Node) RegisterGossipProtocol(protocol string) chan GossipMessage {
-	c := make(chan GossipMessage)
+	c := make(chan GossipMessage, 1000)
 	sn.sim.mutex.Lock()
 	sn.sim.protocolGossipHandler[sn.NodeInfo.PublicKey().String()][protocol] = c
 	sn.sim.mutex.Unlock()

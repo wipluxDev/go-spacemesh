@@ -89,6 +89,7 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 	r := require.New(suite.T())
 
 	net := service.NewSimulator()
+	net.SetLogger(log.NewDefault("sim"))
 	runningName := 'a'
 	rolacle := eligibility.New()
 	poetClient, err := NewRPCPoetHarnessClient()
@@ -115,13 +116,13 @@ func (suite *AppTestSuite) initMultipleInstances(numOfInstances int, storeFormat
 
 			smApp.Config.HARE.N = numOfInstances
 			smApp.Config.HARE.F = numOfInstances / 2
-			smApp.Config.HARE.RoundDuration = 25
-			smApp.Config.HARE.WakeupDelta = 25
+			smApp.Config.HARE.RoundDuration = 10
+			smApp.Config.HARE.WakeupDelta = 10
 			smApp.Config.HARE.ExpectedLeaders = 5
 			smApp.Config.CoinbaseAccount = strconv.Itoa(i + 1)
 			smApp.Config.LayerAvgSize = numOfInstances
 			smApp.Config.LayersPerEpoch = 4
-			smApp.Config.LayerDurationSec = 180
+			smApp.Config.LayerDurationSec = 60
 			smApp.Config.GenesisTime = genesisTime.Format(time.RFC3339)
 
 			edSgn := signing.NewEdSigner()
@@ -186,7 +187,7 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}
 	txbytes, _ := types.SignedTransactionAsBytes(tx)
 	path := "../tmp/test/state_" + time.Now().String()
-	suite.initMultipleInstances(60, path)
+	suite.initMultipleInstances(30, path)
 	g, _ := errgroup.WithContext(context.Background())
 	for _, a := range suite.apps {
 		a := a
@@ -244,10 +245,10 @@ loop:
 			time.Sleep(30 * time.Second)
 		}
 	}
-	for i := types.LayerID(3); true; i++ {
-		suite.validateBlocksAndATXs(i*4 - 1)
-		fmt.Printf("PASSED THAT SHITTTTTTT LAYER %v \r\n", i*4)
-	}
+	//for i := types.LayerID(3); true; i++ {
+		suite.validateBlocksAndATXs(3*4 - 1)
+		fmt.Printf("PASSED THAT SHITTTTTTT LAYER %v \r\n", 3*4)
+	//}
 
 }
 
@@ -352,8 +353,8 @@ func (suite *AppTestSuite) validateBlocksAndATXs(untilLayer types.LayerID) {
 		total_atxs += len(atxs)
 	}
 
-	assert.True(suite.T(), ((total_blocks-first_epoch_blocks)/(lastlayer-layers_per_epoch)) == layer_avg_size, fmt.Sprintf("not good num of blocks got: %v, want: %v. total_blocks: %v, first_epoch_blocks: %v, lastlayer: %v, layers_per_epoch: %v", (total_blocks-first_epoch_blocks)/(lastlayer-layers_per_epoch), layer_avg_size, total_blocks, first_epoch_blocks, lastlayer, layers_per_epoch))
-	assert.True(suite.T(), total_atxs == (lastlayer/layers_per_epoch)*len(suite.apps), fmt.Sprintf("not good num of atxs got: %v, want: %v", total_atxs, (lastlayer/layers_per_epoch)*len(suite.apps)))
+	require.True(suite.T(), ((total_blocks-first_epoch_blocks)/(lastlayer-layers_per_epoch)) == layer_avg_size, fmt.Sprintf("not good num of blocks got: %v, want: %v. total_blocks: %v, first_epoch_blocks: %v, lastlayer: %v, layers_per_epoch: %v", (total_blocks-first_epoch_blocks)/(lastlayer-layers_per_epoch), layer_avg_size, total_blocks, first_epoch_blocks, lastlayer, layers_per_epoch))
+	require.True(suite.T(), total_atxs == (lastlayer/layers_per_epoch)*len(suite.apps), fmt.Sprintf("not good num of atxs got: %v, want: %v", total_atxs, (lastlayer/layers_per_epoch)*len(suite.apps)))
 
 }
 
