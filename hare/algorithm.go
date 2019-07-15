@@ -305,7 +305,7 @@ func (proc *ConsensusProcess) handleMessage(m *Msg) {
 }
 
 func (proc *ConsensusProcess) processMsg(m *Msg) {
-	proc.Debug("Processing message of type %v", m.InnerMsg.Type.String())
+	proc.Info("Processing message of type %v", m.InnerMsg.Type.String())
 	metrics.MessageTypeCounter.With("type_id", m.InnerMsg.Type.String()).Add(1)
 
 	switch m.InnerMsg.Type {
@@ -343,7 +343,7 @@ func (proc *ConsensusProcess) sendMessage(msg *Msg) {
 		return
 	}
 
-	proc.With().Debug("message sent", log.String("msg_type", msg.InnerMsg.Type.String()),
+	proc.With().Info("message sent", log.String("msg_type", msg.InnerMsg.Type.String()),
 		log.Uint64("layer_id", uint64(proc.instanceId)))
 }
 
