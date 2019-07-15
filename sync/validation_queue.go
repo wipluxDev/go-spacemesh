@@ -127,7 +127,6 @@ func (vq *validationQueue) finishBlockCallback(s *Syncer, block *types.Block) fu
 func (vq *validationQueue) updateDependencies(block types.BlockID) []types.BlockID {
 	delete(vq.depMap, block)
 	var blocks []types.BlockID
-	blocks = append(blocks, block)
 	doneQueue := make([]types.BlockID, 0, len(vq.depMap))
 	doneQueue = vq.removefromDepMaps(block, doneQueue)
 	for {
