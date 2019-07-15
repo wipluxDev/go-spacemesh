@@ -310,7 +310,7 @@ func (s *Syncer) confirmBlockValidity(blk *types.Block) error {
 
 	//block eligibility
 	if eligable, err := s.BlockEligible(&blk.BlockHeader); err != nil || !eligable {
-		return errors.New(fmt.Sprintf("block %v eligablety check failed ", blk.ID()))
+		return errors.New(fmt.Sprintf("block %v eligablety check failed err=%v", blk.ID(), err))
 	}
 
 	return nil
