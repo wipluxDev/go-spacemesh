@@ -2,6 +2,7 @@ package sync
 
 import (
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/spacemeshos/go-spacemesh/activation"
 	"github.com/spacemeshos/go-spacemesh/address"
@@ -15,6 +16,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sync"
 	"testing"
 	"time"
 )
@@ -380,6 +382,63 @@ func TestBlockListener_ListenToGossipBlocks(t *testing.T) {
 	bl2.Close()
 	bl1.Close()
 	time.Sleep(1 * time.Second)
+}
+
+func TestBlockListener_ListenToGossipBlocks2(t *testing.T) {
+	sim := service.NewSimulator()
+	n1 := sim.NewNode()
+	n2 := sim.NewNode()
+
+	bl1 := ListenerFactory(n1, PeersMock{func() []p2p.Peer { return []p2p.Peer{n2.PublicKey()} }}, "TestBlockListener_ListenToGossipBlocks1", 1)
+	bl2 := ListenerFactory(n2, PeersMock{func() []p2p.Peer { return []p2p.Peer{n1.PublicKey()} }}, "TestBlockListener_ListenToGossipBlocks2", 1)
+
+	bl1.Info(n1.String())
+	bl2.Info(n2.String())
+
+	bl1.Start()
+	bl2.Start() // TODO: @almog make sure data is available without starting
+
+	blk := types.NewExistingBlock(types.BlockID(uuid.New().ID()), 1, []byte("data1"))
+	tx := types.NewAddressableTx(0, address.Address{0x04}, address.BytesToAddress([]byte{0x01}), 10, 10, 10)
+
+	bl2.txpool.Put(types.GetTransactionId(tx.SerializableSignedTransaction), tx)
+
+	signer := signing.NewEdSigner()
+	mblk := types.Block{MiniBlock: types.MiniBlock{BlockHeader: blk.BlockHeader, TxIds: []types.TransactionId{types.GetTransactionId(tx.SerializableSignedTransaction)}, AtxIds: []types.AtxId{}}}
+	mblk.Signature = signer.Sign(mblk.Bytes())
+
+	data, err := types.InterfaceToBytes(&mblk)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for i := 4; i < 154; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			bl3 := ListenerFactory(sim.NewNode(), PeersMock{func() []p2p.Peer { return []p2p.Peer{n1.PublicKey(), n2.PublicKey()} }}, fmt.Sprintf("TestBlockListener_ListenToGossipBlocks%v", i), 1)
+			txs, _, err := bl3.DataAvailabilty(&mblk)
+			require.NoError(t, err)
+			require.Len(t, txs, 1)
+			wg.Done()
+		}()
+	}
+
+	err = n2.Broadcast(config.NewBlockProtocol, data)
+	assert.NoError(t, err)
+
+	time.Sleep(3 * time.Second)
+
+	b, err := bl1.GetBlock(blk.Id)
+	require.NoError(t, err)
+	require.True(t, mblk.Compare(b))
+
+	b, err = bl2.GetBlock(blk.Id)
+	require.NoError(t, err)
+	require.True(t, mblk.Compare(b))
+
+	bl2.Close()
+	bl1.Close()
+	wg.Wait()
 }
 
 //todo integration testing
