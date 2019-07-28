@@ -95,7 +95,7 @@ func createLayerWithRandVoting(index types.LayerID, prev []*types.Layer, blocksI
 		}
 		l.AddBlock(bl)
 	}
-	log.Info("Created mesh.LayerID %d with blocks %d", l.Index(), layerBlocks)
+	//log.Info("Created mesh.LayerID %d with blocks %d", l.Index(), layerBlocks)
 	return l
 }
 
@@ -130,7 +130,7 @@ func testForeachInView(mdb *MeshDB, t *testing.T) {
 		l = lyr
 	}
 	mp := map[types.BlockID]struct{}{}
-	foo := func(nb *types.BlockHeader) error {
+	foo := func(nb *types.Block) error {
 		fmt.Println("process block", "layer", nb.Id, nb.LayerIndex)
 		mp[nb.Id] = struct{}{}
 		return nil
@@ -143,5 +143,30 @@ func testForeachInView(mdb *MeshDB, t *testing.T) {
 	for _, bl := range blocks {
 		_, found := mp[bl.ID()]
 		assert.True(t, found, "did not process block  ", bl)
+	}
+}
+
+func BenchmarkWriteBlock(b *testing.B){
+	mdb := NewPersistentMeshDB(Path+"/mesh_db/", log.New("TestWriteBlock", "", "").WithOptions(log.Nop))
+	defer mdb.Close()
+	defer teardown()
+	samples := b.N
+	l := GenesisLayer()
+
+	lyrs := make([]*types.Layer, samples)
+	for i := 0; i < samples; i++ {
+		lyrs[i] = createLayerWithRandVoting(l.Index()+1, []*types.Layer{l}, 200, 100)
+		l = lyrs[i]
+	}
+	tm := time.Now()
+	for i := 0; i < samples; i++ {
+		for _, b := range lyrs[i].Blocks() {
+			if i % 100 == 0 {
+				log.Info("batch writes took: %s", time.Since(tm))
+				tm = time.Now()
+			}
+			mdb.AddBlock(b)
+			//log.Info("write took: %s", time.Since(t))
+		}
 	}
 }

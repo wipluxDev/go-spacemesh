@@ -10,6 +10,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/types"
 	"github.com/stretchr/testify/assert"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 )
@@ -250,5 +251,85 @@ func TestLayers_OrphanBlocks(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	arr3, _ := layers.GetOrphanBlocksBefore(4)
 	assert.True(t, len(arr3) == 1, "wrong layer")
+
+}
+
+
+func TestAddBlock(b *testing.T){
+	mdb := NewPersistentMeshDB(Path+"/mesh_db/", log.New("TestWriteBlock", "", "").WithOptions(log.Nop))
+	defer mdb.Close()
+	lg := log.New("benchAddBlock", "", "")
+	layers := NewMesh(NewMemMeshDB(lg), &AtxDbMock{}, ConfigTst(), &MeshValidatorMock{}, MockTxMemPool{}, MockAtxMemPool{}, &MockState{}, lg.WithOptions(log.Nop))
+	defer layers.Close()
+
+	stopChan := make(chan struct{})
+	m := sync.RWMutex{}
+
+	l := GenesisLayer()
+	samples := 1000
+	lyrs := make([]*types.Layer, samples)
+	blk_ids := make([]types.BlockID, 200* samples)
+	for i := 0; i < samples; i++ {
+		lyrs[i] = createLayerWithRandVoting(l.Index()+1, []*types.Layer{l}, 200, 100)
+		l = lyrs[i]
+	}
+	//readsPerSecond := 1000
+	maxRead := time.Since(time.Now())
+	wg := sync.WaitGroup{}
+	go func(){
+		tmr := time.NewTicker(10 * time.Millisecond )
+		loop:
+		for {
+			select {
+			case <- tmr.C:
+				blkId := types.BlockID(0)
+
+				m.RLock()
+				if len(blk_ids) > 0{
+					blkId = blk_ids[rand.Intn(len(blk_ids))]
+				}
+				m.RUnlock()
+				log.Info("+++++++++++++ reading %v", blkId)
+				if blkId != 0 {
+					ts := time.Now()
+					layers.GetBlock(blkId)
+					df := time.Since(ts)
+					if df > maxRead{
+						maxRead = df
+						log.Info("read took : %v", df)
+					}
+				}
+			case <- stopChan:
+				break loop
+			}
+
+		}
+		wg.Done()
+	}()
+
+	tm := time.Now()
+	maxTime := time.Since(tm)
+	for i := 0; i < samples; i++ {
+		for _, b := range lyrs[i].Blocks() {
+			if i % 100 == 0 {
+				tm2 := time.Since(tm)
+				if tm2 > maxTime{
+					maxTime = tm2
+				}
+				log.Info("batch writes took: %s",tm2 )
+				tm = time.Now()
+			}
+			layers.AddBlock(b)
+			m.Lock()
+			blk_ids = append(blk_ids, b.ID())
+			m.Unlock()
+			//log.Info("write took: %s", time.Since(t))
+		}
+		l = lyrs[i]
+	}
+	stopChan <- struct{}{}
+	wg.Wait()
+	log.Info("max time is: %v", maxTime)
+	log.Info("max read time is: %v", maxRead)
 
 }

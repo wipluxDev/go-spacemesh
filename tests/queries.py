@@ -7,7 +7,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
 dt = datetime.now()
-todaydate = dt.strftime("%Y.%m.%d")
+todaydate = dt.strftime("%Y.%m.*")
 current_index = 'kubernetes_cluster-' + todaydate
 
 
@@ -29,7 +29,8 @@ class ES:
         ES_PASSWD = os.getenv("ES_PASSWD")
         if not ES_PASSWD:
             raise Exception("Unknown Elasticsearch password. Please check 'ES_PASSWD' environment variable")
-        self.es = Elasticsearch("http://elastic-alpha.spacemesh.io",
+        print(ES_PASSWD)
+        self.es = Elasticsearch("http://elastic-beta.spacemesh.io",
                                 http_auth=("spacemesh", ES_PASSWD), port=80, timeout=90)
 
     def get_search_api(self):
@@ -117,6 +118,33 @@ def query_message(indx, namespace, client_po_name, fields, findFails=False, star
 
     s = list(hits)
     return s
+
+
+def block_propagation(deployment, blockid):
+    block_fields = {"M": "got new block", "block_id": blockid}
+    logs = query_message(current_index, deployment, deployment, block_fields, False)
+    srt = sorted(logs,key=lambda x: datetime.strptime(x.T, "%Y-%m-%dT%H:%M:%S.%fZ"))
+    if len(srt) > 0:
+        t1 = datetime.strptime(srt[0].T, "%Y-%m-%dT%H:%M:%S.%fZ")
+        t2 = datetime.strptime(srt[len(srt) - 1].T, "%Y-%m-%dT%H:%M:%S.%fZ")
+        diff = t2 - t1
+        print(diff)
+        return diff
+
+
+def layer_max_propagation(deployment, layer):
+    block_fields = {"M": "I've created a block in layer %d" % layer}
+    logs = query_message(current_index, deployment, deployment, block_fields, False)
+    max_propagation = None
+    for x in logs:
+        # id = re.split(r'\.', x.N)[0]
+        m = re.findall(r'\d+', x.M)
+        prop = block_propagation(deployment, m[2])
+        if prop is not None and (max_propagation is None or prop > max_propagation):
+            max_propagation = prop
+    print(max_propagation)
+
+
 
 
 def parseAtx(log_messages):
@@ -286,6 +314,8 @@ def find_missing(indx, namespace, client_po_name, fields, min=1):
     print("Total hits: {0}".format(len(hits)))
     print("Missing count {0}".format(len(miss)))
     print(miss)
+
+def plot_handle_block_time()
 
 
 def query_hare_output_set(indx, ns, layer):
