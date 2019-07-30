@@ -8,6 +8,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/rand"
 	"github.com/spacemeshos/go-spacemesh/types"
 	"sync/atomic"
+	"time"
 )
 
 const AtxProtocol = "AtxGossip"
@@ -277,7 +278,7 @@ func (b *Builder) PublishActivationTx(epoch types.EpochId) (bool, error) {
 	b.challenge = nil
 	b.posLayerID = 0
 
-	//time.Sleep(5 * time.Second)
+	time.Sleep(20 * time.Second)
 	err = b.net.Broadcast(AtxProtocol, buf)
 	if err != nil {
 		return false, err
