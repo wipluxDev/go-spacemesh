@@ -14,12 +14,10 @@ import (
 	"sync"
 )
 
-const messageQBufferSize = 1000
 const propagateHandleBufferSize = 1000 // number of MessageValidation that we allow buffering, above this number protocols will get stuck
 
 const ProtocolName = "/p2p/1.0/gossip"
 const protocolVer = "0"
-
 
 type hash [12]byte
 
@@ -36,11 +34,10 @@ func calcHash(msg []byte, prot string) hash {
 }
 
 type doubleCache struct {
-	size uint
-	cacheA  map[hash]struct{}
-	cacheB  map[hash]struct{}
+	size   uint
+	cacheA map[hash]struct{}
+	cacheB map[hash]struct{}
 }
-
 
 func newDoubleCache(size uint) *doubleCache {
 	return &doubleCache{size, make(map[hash]struct{}, size), make(map[hash]struct{}, size)}
@@ -72,7 +69,6 @@ func (a *doubleCache) insert(key hash) {
 	a.cacheA = make(map[hash]struct{}, a.size)
 }
 
-
 // Interface for the underlying p2p layer
 type baseNetwork interface {
 	SendMessage(peerPubkey p2pcrypto.PublicKey, protocol string, payload []byte) error
@@ -99,10 +95,10 @@ func NewMsgCache(size int) MsgCache {
 }
 
 func (bc *MsgCache) Put(id hash) {
-	bc.Cache.Add(id, struct {}{})
+	bc.Cache.Add(id, struct{}{})
 }
 
-func (bc MsgCache) Get(id hash)  bool {
+func (bc MsgCache) Get(id hash) bool {
 	_, found := bc.Cache.Get(id)
 	return found
 }
@@ -115,7 +111,7 @@ type Protocol struct {
 	net             baseNetwork
 	localNodePubkey p2pcrypto.PublicKey
 
-	peers      map[string]*peer
+	peers      map[p2pcrypto.PublicKey]*peer
 	peersMutex sync.RWMutex
 
 	shutdown chan struct{}
@@ -135,10 +131,9 @@ func NewProtocol(config config.SwarmConfig, base baseNetwork, localNodePubkey p2
 		config:          config,
 		net:             base,
 		localNodePubkey: localNodePubkey,
-		peers:           make(map[string]*peer),
+		peers:           make(map[p2pcrypto.PublicKey]*peer),
 		shutdown:        make(chan struct{}),
-		oldMessageQ:     newDoubleCache(100000), // todo : remember to drain this
-		messageQ:        make(chan protocolMessage, messageQBufferSize),
+		oldMessageQ:     newDoubleCache(10000), // todo : remember to drain this
 		propagateQ:      make(chan service.MessageValidation, propagateHandleBufferSize),
 	}
 }
@@ -186,7 +181,7 @@ func (prot *Protocol) propagateMessage(payload []byte, h hash, nextProt string, 
 	prot.peersMutex.RLock()
 peerLoop:
 	for p := range prot.peers {
-		if exclude.String() == p {
+		if exclude == p {
 			continue peerLoop
 		}
 		go func(pubkey p2pcrypto.PublicKey) {
@@ -216,13 +211,13 @@ func (prot *Protocol) Start() {
 
 func (prot *Protocol) addPeer(peer p2pcrypto.PublicKey) {
 	prot.peersMutex.Lock()
-	prot.peers[peer.String()] = newPeer(prot.net, peer, prot.Log)
+	prot.peers[peer] = newPeer(prot.net, peer, prot.Log)
 	prot.peersMutex.Unlock()
 }
 
 func (prot *Protocol) removePeer(peer p2pcrypto.PublicKey) {
 	prot.peersMutex.Lock()
-	delete(prot.peers, peer.String())
+	delete(prot.peers, peer)
 	prot.peersMutex.Unlock()
 }
 
@@ -236,12 +231,13 @@ func (prot *Protocol) processMessage(sender p2pcrypto.PublicKey, protocol string
 		// todo : - have some more metrics for termination
 		// todo	: - maybe tell the peer we got this message already?
 		// todo : - maybe block this peer since he sends us old messages
-		prot.Log.With().Debug("old_gossip_message", log.String("from", sender.String()), log.String("protocol", protocol), log.String("hash", common.BytesToHash(h[:]).ShortString()))
+		prot.Log.With().Debug("old_gossip_message", log.String("from", sender.String()), log.String("protocol", protocol), log.String("hash", common.Bytes2Hex(h[:])))
 		return nil
 	}
 
-	prot.Log.With().EventInfo("new_gossip_message", log.String("from", sender.String()), log.String("protocol", protocol), log.String("hash", common.BytesToHash(h[:]).ShortString()))
-	metrics.NewGossipMessages.With("protocol", protocol).Add(1)
+	prot.Log.With().EventInfo("new_gossip_message", log.String("from", sender.String()), log.String("protocol", protocol), log.String("hash", common.Bytes2Hex(h[:])))
+	// todo: PROMETHEUS
+	//metrics.NewGossipMessages.With("protocol", protocol).Add(1)
 	return prot.net.ProcessGossipProtocolMessage(sender, protocol, msg, prot.propagateQ)
 }
 
@@ -252,8 +248,8 @@ loop:
 		select {
 		case msgV := <-prot.propagateQ:
 			h := calcHash(msgV.Message(), msgV.Protocol())
-			prot.Log.With().EventDebug("new_gossip_message_relay",  log.String("protocol", msgV.Protocol()), log.String("hash", common.BytesToHash(h[:]).ShortString()))
-			go prot.propagateMessage(msgV.Message(), calcHash(msgV.Message(), msgV.Protocol()), msgV.Protocol(), msgV.Sender())
+			prot.Log.With().EventDebug("new_gossip_message_relay", log.String("protocol", msgV.Protocol()), log.String("hash", common.Bytes2Hex(h[:])))
+			prot.propagateMessage(msgV.Message(), h, msgV.Protocol(), msgV.Sender())
 		case <-prot.shutdown:
 			err = errors.New("protocol shutdown")
 			break loop
@@ -295,7 +291,7 @@ func (prot *Protocol) peersCount() int {
 // hasPeer returns whether or not a peer is known to the protocol, used for testing only
 func (prot *Protocol) hasPeer(key p2pcrypto.PublicKey) bool {
 	prot.peersMutex.RLock()
-	_, ok := prot.peers[key.String()]
+	_, ok := prot.peers[key]
 	prot.peersMutex.RUnlock()
 	return ok
 }
