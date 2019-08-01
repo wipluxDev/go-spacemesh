@@ -140,7 +140,7 @@ func newSwarm(ctx context.Context, config config.Config, newNode bool, persist b
 		shutdown: make(chan struct{}), // non-buffered so requests to shutdown block until swarm is shut down
 
 		initial:           make(chan struct{}),
-		morePeersReq:      make(chan struct{}),
+		morePeersReq:      make(chan struct{},config.MaxInboundPeers+config.OutboundPeersTarget),
 		inpeers:           make(map[p2pcrypto.PublicKey]struct{}),
 		outpeers:          make(map[p2pcrypto.PublicKey]struct{}),
 		newPeerSub:        make([]chan p2pcrypto.PublicKey, 0, 10),
@@ -646,12 +646,15 @@ func (s *swarm) startNeighborhood() error {
 }
 
 func (s *swarm) peersLoop() {
+	var moreLock uint32 = 0
 loop:
 	for {
 		select {
 		case <-s.morePeersReq:
 			s.lNode.Debug("loop: got morePeersReq")
-			go s.askForMorePeers()
+			if atomic.CompareAndSwapUint32(&moreLock, 0, 1) {
+				go s.askForMorePeers(&moreLock)
+			}
 		//todo: try getting the connections (heartbeat)
 		case <-s.shutdown:
 			break loop // maybe error ?
@@ -659,19 +662,23 @@ loop:
 	}
 }
 
-func (s *swarm) askForMorePeers() {
+func (s *swarm) askForMorePeers(doneFlag *uint32) {
 	s.outpeersMutex.RLock()
 	numpeers := len(s.outpeers)
 	s.outpeersMutex.RUnlock()
 	req := s.config.SwarmConfig.RandomConnections - numpeers
 	if req <= 0 {
+		atomic.StoreUint32(doneFlag, 0)
 		return
 	}
 
 	s.getMorePeers(req)
 
+	s.outpeersMutex.RLock()
+	numpeers = len(s.outpeers)
+	s.outpeersMutex.RUnlock()
 	// todo: better way then going in this every time ?
-	if len(s.outpeers) >= s.config.SwarmConfig.RandomConnections {
+	if numpeers >= s.config.SwarmConfig.RandomConnections {
 		s.initOnce.Do(func() {
 			s.lNode.Info("gossip; connected to initial required neighbors - %v", len(s.outpeers))
 			close(s.initial)
@@ -679,17 +686,14 @@ func (s *swarm) askForMorePeers() {
 			s.lNode.Debug(spew.Sdump(s.outpeers))
 			s.outpeersMutex.RUnlock()
 		})
+		atomic.StoreUint32(doneFlag, 0)
 		return
 	}
 	// if we could'nt get any maybe were initializing
 	// wait a little bit before trying again
 	time.Sleep(NoResultsInterval)
-	select {
-	case s.morePeersReq <- struct{}{}:
-		return
-	case <-s.shutdown:
-		return
-	}
+	atomic.StoreUint32(doneFlag, 0)
+	s.morePeersReq <- struct{}{}
 }
 
 // getMorePeers tries to fill the `peers` slice with dialed outbound peers that we selected from the discovery.
@@ -740,6 +744,7 @@ loop:
 			if cne.err != nil {
 				s.lNode.Debug("can't establish connection with sampled peer %v, %v", cne.n.PublicKey(), cne.err)
 				bad++
+				s.discover.Attempt(cne.n.PublicKey())
 				break // this peer didn't work, todo: tell discovery
 			}
 
@@ -765,6 +770,7 @@ loop:
 			s.outpeersMutex.Unlock()
 
 			s.publishNewPeer(cne.n.PublicKey())
+			s.discover.Good(cne.n.PublicKey())
 			// todo: PROMETHEUS
 			//metrics.OutboundPeers.Add(1)
 			s.lNode.Debug("Neighborhood: Added peer to peer list %v", cne.n.PublicKey())

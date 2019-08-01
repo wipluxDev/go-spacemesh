@@ -599,6 +599,8 @@ func Test_Swarm_getMorePeers2(t *testing.T) {
 	assertNoNewPeerEvent(t, conn)
 }
 
+
+
 func Test_Swarm_getMorePeers3(t *testing.T) {
 	// test normal flow
 	numpeers := 3
