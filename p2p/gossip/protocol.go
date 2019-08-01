@@ -14,7 +14,6 @@ import (
 	"sync"
 )
 
-const messageQBufferSize = 1000
 const propagateHandleBufferSize = 1000 // number of MessageValidation that we allow buffering, above this number protocols will get stuck
 
 const ProtocolName = "/p2p/1.0/gossip"
@@ -134,8 +133,7 @@ func NewProtocol(config config.SwarmConfig, base baseNetwork, localNodePubkey p2
 		localNodePubkey: localNodePubkey,
 		peers:           make(map[p2pcrypto.PublicKey]*peer),
 		shutdown:        make(chan struct{}),
-		oldMessageQ:     newDoubleCache(100000), // todo : remember to drain this
-		messageQ:        make(chan protocolMessage, messageQBufferSize),
+		oldMessageQ:     newDoubleCache(10000), // todo : remember to drain this
 		propagateQ:      make(chan service.MessageValidation, propagateHandleBufferSize),
 	}
 }
@@ -250,8 +248,8 @@ loop:
 		select {
 		case msgV := <-prot.propagateQ:
 			h := calcHash(msgV.Message(), msgV.Protocol())
-			prot.Log.With().EventDebug("new_gossip_message_relay", log.String("protocol", msgV.Protocol()), log.String("hash", common.BytesToHash(h[:]).ShortString()))
-			go prot.propagateMessage(msgV.Message(), calcHash(msgV.Message(), msgV.Protocol()), msgV.Protocol(), msgV.Sender())
+			prot.Log.With().EventDebug("new_gossip_message_relay", log.String("protocol", msgV.Protocol()), log.String("hash", common.Bytes2Hex(h[:])))
+			prot.propagateMessage(msgV.Message(), h, msgV.Protocol(), msgV.Sender())
 		case <-prot.shutdown:
 			err = errors.New("protocol shutdown")
 			break loop
