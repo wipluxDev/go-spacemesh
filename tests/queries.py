@@ -30,7 +30,7 @@ class ES:
         if not ES_PASSWD:
             raise Exception("Unknown Elasticsearch password. Please check 'ES_PASSWD' environment variable")
         print(ES_PASSWD)
-        self.es = Elasticsearch("http://elastic-beta.spacemesh.io",
+        self.es = Elasticsearch("http://elastic-alpha.spacemesh.io",
                                 http_auth=("spacemesh", ES_PASSWD), port=80, timeout=90)
 
     def get_search_api(self):
@@ -314,8 +314,6 @@ def find_missing(indx, namespace, client_po_name, fields, min=1):
     print("Total hits: {0}".format(len(hits)))
     print("Missing count {0}".format(len(miss)))
     print(miss)
-
-def plot_handle_block_time()
 
 
 def query_hare_output_set(indx, ns, layer):

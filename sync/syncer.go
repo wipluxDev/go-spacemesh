@@ -122,14 +122,18 @@ func (s *Syncer) Start() {
 	}
 }
 
-//fires a sync every sm.syncInterval or on force space from outside
-func (s *Syncer) run() {
-	syncRoutine := func() {
+func (s *Syncer) getSyncRoutine() func() {
+	return func() {
 		if atomic.CompareAndSwapUint32(&s.SyncLock, IDLE, RUNNING) {
 			s.Synchronise()
 			atomic.StoreUint32(&s.SyncLock, IDLE)
 		}
 	}
+}
+
+//fires a sync every sm.syncInterval or on force space from outside
+func (s *Syncer) run() {
+	syncRoutine := s.getSyncRoutine()
 	for {
 		select {
 		case <-s.exit:
@@ -185,7 +189,6 @@ func (s *Syncer) maxSyncLayer() types.LayerID {
 }
 
 func (s *Syncer) Synchronise() {
-	mu := sync.Mutex{}
 	for currentSyncLayer := s.ValidatedLayer() + 1; currentSyncLayer < s.maxSyncLayer(); currentSyncLayer++ {
 		s.Info("syncing layer %v current consensus layer is %d", currentSyncLayer, s.currentLayer)
 		lyr, err := s.GetLayer(types.LayerID(currentSyncLayer))
@@ -196,12 +199,7 @@ func (s *Syncer) Synchronise() {
 				return
 			}
 		}
-
-		mu.Lock()
-		go func(lyrToValidate types.Layer) {
-			s.ValidateLayer(&lyrToValidate) //run one at a time
-			mu.Unlock()
-		}(*lyr)
+		s.ValidateLayer(lyr) //run one at a time
 	}
 }
 

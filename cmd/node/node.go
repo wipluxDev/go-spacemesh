@@ -385,7 +385,7 @@ func (app *SpacemeshApp) initServices(nodeID types.NodeId, swarm service.Service
 
 		return true
 	}
-	ha := hare.New(app.Config.HARE, swarm, sgn, nodeID, validationFunc, syncer.IsSynced, msh, hOracle, uint16(app.Config.LayersPerEpoch), idStore, atxdb, clock.Subscribe(), lg.WithName("hare"))
+	ha := hare.New(app.Config.HARE, swarm, sgn, nodeID, validationFunc, syncer.IsSynced, msh, hOracle, uint16(app.Config.LayersPerEpoch), idStore, atxdb, clock.Subscribe(), lg.WithName("hare").WithOptions(log.EnableLevelOption(log.WarnLevel)))
 
 	blockProducer := miner.NewBlockBuilder(nodeID, sgn, swarm, clock.Subscribe(), txpool, atxpool, coinToss, msh, ha, blockOracle, processor, atxdb, syncer, uint16(app.Config.LayersPerEpoch), lg.WithName("blockBuilder"))
 	blockListener := sync.NewBlockListener(swarm, syncer, 4, uint16(app.Config.LayersPerEpoch), lg.WithName("blockListener"))
@@ -627,7 +627,7 @@ func (app *SpacemeshApp) Start(cmd *cobra.Command, args []string) {
 		app.jsonAPIService.StartService(nil)
 	}
 
-	log.Info("App started.")
+	log.Info("App started. anton :)")
 
 	// app blocks until it receives a signal to exit
 	// this signal may come from the node or from sig-abort (ctrl-c)

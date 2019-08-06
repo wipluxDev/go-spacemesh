@@ -196,7 +196,7 @@ func (proc *ConsensusProcess) SetInbox(inbox chan *Msg) {
 }
 
 func (proc *ConsensusProcess) eventLoop() {
-	proc.With().EventInfo("Consensus Process Started",
+	proc.With().EventWarning("Consensus Process Started",
 		log.Int("Hare-N", proc.cfg.N), log.Int("f", proc.cfg.F), log.String("duration", (time.Duration(proc.cfg.RoundDuration)*time.Second).String()),
 		log.LayerId(uint64(proc.instanceId)), log.Int("exp_leaders", proc.cfg.ExpectedLeaders), log.String("set_values", proc.s.String()))
 
@@ -530,7 +530,7 @@ func (proc *ConsensusProcess) processNotifyMsg(msg *Msg) {
 
 	// enough notifications, should terminate
 	proc.s = s // update to the agreed set
-	proc.With().EventInfo("Consensus process terminated", log.String("set_values", proc.s.String()),
+	proc.With().EventWarning("Consensus process terminated", log.String("set_values", proc.s.String()),
 		log.Uint64("layer_id", uint64(proc.instanceId)))
 	proc.terminationReport <- procOutput{proc.instanceId, proc.s}
 	proc.Close()
