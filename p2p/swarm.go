@@ -720,6 +720,7 @@ loop:
 			if cne.err != nil {
 				s.lNode.Debug("can't establish connection with sampled peer %v, %v", cne.n.String(), cne.err)
 				bad++
+				s.discover.Attempt(cne.n.PublicKey())
 				break // this peer didn't work, todo: tell discovery
 			}
 
@@ -744,6 +745,7 @@ loop:
 			s.outpeers[pkstr] = cne.n.PublicKey()
 			s.outpeersMutex.Unlock()
 
+			s.discover.Good(cne.n.PublicKey())
 			s.publishNewPeer(cne.n.PublicKey())
 			metrics.OutboundPeers.Add(1)
 			s.lNode.Debug("Neighborhood: Added peer to peer list %v", cne.n.String())
