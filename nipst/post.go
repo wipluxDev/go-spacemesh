@@ -88,6 +88,9 @@ func (c *PostClient) SetParams(dataDir string, space uint64) {
 
 	c.initializer = initialization.NewInitializer(&cfg, c.id)
 	c.prover = proving.NewProver(&cfg, c.id)
+	c.initializer.SetLogger(c.logger)
+	c.prover.SetLogger(c.logger)
+
 	c.cfg = &cfg
 }
 
