@@ -264,6 +264,7 @@ func (b *Builder) StartPost(rewardAddress address.Address, dataDir string, space
 	b.InitLock.Unlock()
 
 	b.log.Info("Starting post, reward address: %x", rewardAddress)
+	b.log.Info("## 1: datadir: %v, space: %v", dataDir, space)
 	b.SetCoinbaseAccount(rewardAddress)
 	b.postProver.SetParams(dataDir, space)
 
@@ -272,7 +273,7 @@ func (b *Builder) StartPost(rewardAddress address.Address, dataDir string, space
 		b.InitLock.Lock()
 		b.initStatus = InitIdle
 		b.InitLock.Unlock()
-		return err
+		return fmt.Errorf("## IsInitialized err: %v", err)
 	}
 
 	if !initialized {
@@ -280,7 +281,7 @@ func (b *Builder) StartPost(rewardAddress address.Address, dataDir string, space
 			b.InitLock.Lock()
 			b.initStatus = InitIdle
 			b.InitLock.Unlock()
-			return err
+			return fmt.Errorf("## VerifyInitAllowed err: %v", err)
 		}
 	}
 

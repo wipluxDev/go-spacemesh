@@ -93,6 +93,8 @@ func (c *PostClient) SetParams(dataDir string, space uint64) {
 
 func (c *PostClient) SetLogger(logger shared.Logger) {
 	c.logger = logger
+	c.initializer.SetLogger(logger)
+	c.prover.SetLogger(logger)
 }
 
 func (c *PostClient) Cfg() *config.Config {
