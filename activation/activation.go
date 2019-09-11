@@ -185,7 +185,7 @@ func (b *Builder) buildNipstChallenge(epoch types.EpochId) error {
 			b.prevATX, err = b.db.GetAtx(prevAtxId)
 			if err != nil {
 				// TODO: handle inconsistent state
-				b.log.Panic("prevAtx (id: %v) not found in DB -- inconsistent state", prevAtxId.ShortId())
+				b.log.Panic("prevAtx (id: %v) not found in DB -- inconsistent state", prevAtxId.ShortString())
 			}
 		}
 	}
@@ -429,6 +429,7 @@ func (b *Builder) PublishActivationTx(epoch types.EpochId) error {
 	var activeSetSize uint32
 	if pubEpoch > 0 {
 		var err error
+		b.log.With().Info("calculating active ids")
 		activeSetSize, err = b.db.CalcActiveSetFromView(view, pubEpoch)
 		if err != nil {
 			return fmt.Errorf("failed to calculate activeset: %v", err)
@@ -470,7 +471,7 @@ func (b *Builder) PublishActivationTx(epoch types.EpochId) error {
 		log.Error("cannot discard nipst challenge %s", err)
 	}
 
-	b.log.Event().Info("atx published!", log.AtxId(atx.ShortId()), log.String("prev_atx_id", atx.PrevATXId.ShortString()),
+	b.log.Event().Info("atx published!", log.AtxId(atx.ShortString()), log.String("prev_atx_id", atx.PrevATXId.ShortString()),
 		log.String("post_atx_id", atx.PositioningAtx.ShortString()), log.LayerId(uint64(atx.PubLayerIdx)), log.EpochId(uint64(atx.PubLayerIdx.GetEpoch(b.layersPerEpoch))),
 		log.Uint32("active_set", atx.ActiveSetSize), log.String("miner", b.nodeId.Key[:5]), log.Int("view", len(atx.View)))
 

@@ -55,6 +55,7 @@ type Mesh struct {
 	*MeshDB
 	AtxDB
 	TxProcessor
+	MeshValidator
 	txInvalidator  TxMemPoolInValidator
 	atxInvalidator AtxMemPoolInValidator
 	config         Config
@@ -64,7 +65,6 @@ type Mesh struct {
 	lkMutex        sync.RWMutex
 	lcMutex        sync.RWMutex
 	lvMutex        sync.RWMutex
-	tortoise       MeshValidator
 	orphMutex      sync.RWMutex
 	done           chan struct{}
 }
@@ -73,7 +73,7 @@ func NewMesh(db *MeshDB, atxDb AtxDB, rewardConfig Config, mesh MeshValidator, t
 	//todo add boot from disk
 	ll := &Mesh{
 		Log:            logger,
-		tortoise:       mesh,
+		MeshValidator:  mesh,
 		txInvalidator:  txInvalidator,
 		atxInvalidator: atxInvalidator,
 		TxProcessor:    pr,
@@ -183,7 +183,7 @@ func (m *Mesh) ValidateLayer(lyr *types.Layer) {
 		m.AccumulateRewards(lyr.Index()-m.config.RewardMaturity, m.config)
 	}
 
-	oldPbase, newPbase := m.tortoise.HandleIncomingLayer(lyr)
+	oldPbase, newPbase := m.HandleIncomingLayer(lyr)
 	m.lvMutex.Lock()
 	m.validatedLayer = lyr.Index()
 	m.lvMutex.Unlock()
@@ -279,7 +279,7 @@ func (m *Mesh) GetLatestView() []types.BlockID {
 	}
 	view := make([]types.BlockID, 0, len(layer.Blocks()))
 	for _, blk := range layer.Blocks() {
-		view = append(view, blk.Id)
+		view = append(view, blk.ID())
 	}
 	return view
 }
@@ -302,12 +302,10 @@ func (m *Mesh) AddBlock(blk *types.Block) error {
 func (m *Mesh) AddBlockWithTxs(blk *types.Block, txs []*types.AddressableSignedTransaction, atxs []*types.ActivationTx) error {
 	m.Debug("add block %d", blk.ID())
 
-	events.Publish(events.NewBlock{Id: uint64(blk.Id), Atx: blk.ATXID.String(), Layer: uint64(blk.LayerIndex)})
-	atxids := make([]types.AtxId, 0, len(atxs))
+	events.Publish(events.NewBlock{Id: uint64(blk.ID()), Atx: blk.ATXID.ShortString(), Layer: uint64(blk.LayerIndex)})
 	for _, t := range atxs {
 		//todo this should return an error
 		m.AtxDB.ProcessAtx(t)
-		atxids = append(atxids, t.Id())
 	}
 
 	err := m.writeTransactions(txs)
@@ -428,7 +426,7 @@ func (m *Mesh) AccumulateRewards(rewardLayer types.LayerID, params Config) {
 	for _, bl := range l.Blocks() {
 		atx, err := m.AtxDB.GetAtx(bl.ATXID)
 		if err != nil {
-			m.With().Warning("Atx from block not found in db", log.Err(err), log.BlockId(uint64(bl.Id)), log.AtxId(bl.ATXID.ShortString()))
+			m.With().Warning("Atx from block not found in db", log.Err(err), log.BlockId(uint64(bl.ID())), log.AtxId(bl.ATXID.ShortString()))
 			continue
 		}
 		ids = append(ids, atx.Coinbase)
@@ -480,7 +478,7 @@ func (m *Mesh) GetATXs(atxIds []types.AtxId) (map[types.AtxId]*types.ActivationT
 	for _, id := range atxIds {
 		t, err := m.GetFullAtx(id)
 		if err != nil {
-			m.Warning("could not get atx %v  from database, %v", id.ShortId(), err)
+			m.Warning("could not get atx %v  from database, %v", id.ShortString(), err)
 			mIds = append(mIds, id)
 		} else {
 			atxs[t.Id()] = t

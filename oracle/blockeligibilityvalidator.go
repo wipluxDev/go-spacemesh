@@ -53,7 +53,7 @@ func (v BlockEligibilityValidator) BlockSignedAndEligible(block *types.Block) (b
 
 	nodeId, active, atxid, err := v.activationDb.IsIdentityActive(pubString, block.Layer())
 	if err != nil {
-		return false, errors.New(fmt.Sprintf("error while checking IsIdentityActive for %v %v ", block.ID(), err))
+		return false, errors.New(fmt.Sprintf("error while checking IsIdentityActive for %v %v (ignore if the publication layer is in genesis)", block.ID(), err))
 	}
 
 	if !active {
@@ -61,7 +61,7 @@ func (v BlockEligibilityValidator) BlockSignedAndEligible(block *types.Block) (b
 	}
 
 	if atxid != block.ATXID {
-		return false, errors.New(fmt.Sprintf("wrong associated atx got %v expected %v ", block.ATXID.ShortId(), atxid))
+		return false, errors.New(fmt.Sprintf("wrong associated atx got %v expected %v ", block.ATXID.ShortString(), atxid))
 	}
 
 	epochNumber := block.LayerIndex.GetEpoch(v.layersPerEpoch)
