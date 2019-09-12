@@ -41,6 +41,7 @@ def query_bootstrap_es(indx, namespace, bootstrap_po_name):
            Q("match_phrase", M="Local node identity")
     s = Search(index=indx, using=es).query('bool', filter=[fltr])
     hits = list(s.scan())
+
     for h in hits:
         match = re.search(r"Local node identity \w+ (?P<bootstrap_key>\w+)", h.log)
         if match:

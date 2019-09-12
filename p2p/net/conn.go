@@ -5,7 +5,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/config"
 	"github.com/spacemeshos/go-spacemesh/p2p/delimited"
-	"github.com/spacemeshos/go-spacemesh/p2p/metrics"
 	"github.com/spacemeshos/go-spacemesh/p2p/p2pcrypto"
 	"time"
 
@@ -33,6 +32,12 @@ const (
 	Remote
 )
 
+type queuedMessage struct {
+	b []byte
+	res chan error
+}
+
+
 // Connection is an interface stating the API of all secured connections in the system
 type Connection interface {
 	fmt.Stringer
@@ -47,7 +52,8 @@ type Connection interface {
 	SetSession(session NetworkSession)
 
 	Send(m []byte) error
-	Close()
+	SendNow(m []byte) error
+	Close() error
 	Closed() bool
 }
 
@@ -70,6 +76,8 @@ type FormattedConnection struct {
 	closed     bool
 	deadliner  deadliner
 	close      io.Closer
+
+	sendQueue chan queuedMessage
 
 	msgSizeLimit int
 }
@@ -120,6 +128,7 @@ func newConnection(conn readWriteCloseAddresser, netw networker,
 		networker:    netw,
 		session:      session,
 		msgSizeLimit: msgSizeLimit,
+		sendQueue: make(chan queuedMessage, 100),
 	}
 
 	return connection
@@ -167,35 +176,72 @@ func (c *FormattedConnection) publish(message []byte) {
 // Send binary data to a connection
 // data is copied over so caller can get rid of the data
 // Concurrency: can be called from any go routine
-func (c *FormattedConnection) Send(m []byte) error {
+func (c *FormattedConnection) SendNow(m []byte) error {
 	c.wmtx.Lock()
+	defer c.wmtx.Unlock()
+	if c.closed {
+		return fmt.Errorf("connection was closed")
+	}
+
 	c.deadliner.SetWriteDeadline(time.Now().Add(c.deadline))
+	_, err := c.w.WriteRecord(m)
+	if err != nil {
+		cerr := c.closeUnlocked()
+		if cerr != ErrAlreadyClosed {
+			c.networker.publishClosingConnection(ConnectionWithErr{c, err}) // todo: reconsider
+		}
+		return err
+	}
+	return nil
+}
+
+func (c *FormattedConnection) sendRoutine() {
+	for {
+		b := <-c.sendQueue
+		t := time.Now()
+		err := c.SendNow(b.b)
+		c.logger.Info("SEND TOOK - %v ", time.Since(t))
+		b.res <- err
+		if err != nil {
+			break
+		}
+	}
+}
+
+func (c * FormattedConnection) Send(m []byte) error {
+	c.wmtx.Lock()
 	if c.closed {
 		c.wmtx.Unlock()
 		return fmt.Errorf("connection was closed")
 	}
-	_, err := c.w.WriteRecord(m)
 	c.wmtx.Unlock()
+
+	res := make(chan error, 1)
+	c.sendQueue <- queuedMessage{m, res }
+	return <-res
+}
+
+var ErrAlreadyClosed = errors.New("connection is already closed")
+
+func (c *FormattedConnection) closeUnlocked() error {
+	if c.closed {
+		return ErrAlreadyClosed
+	}
+	err := c.close.Close()
+	c.closed = true
 	if err != nil {
+		c.logger.Warning("error while closing with connection %v, err: %v", c.RemotePublicKey().String(), err)
 		return err
 	}
-	metrics.PeerRecv.With(metrics.PeerIdLabel, c.remotePub.String()).Add(float64(len(m)))
 	return nil
 }
 
 // Close closes the connection (implements io.Closer). It is go safe.
-func (c *FormattedConnection) Close() {
+func (c *FormattedConnection) Close() error {
 	c.wmtx.Lock()
-	if c.closed {
-		c.wmtx.Unlock()
-		return
-	}
-	err := c.close.Close()
-	c.closed = true
+	err := c.closeUnlocked()
 	c.wmtx.Unlock()
-	if err != nil {
-		c.logger.Warning("error while closing with connection %v, err: %v", c.RemotePublicKey().String(), err)
-	}
+	return err
 }
 
 // Closed returns whether the connection is closed
@@ -217,7 +263,7 @@ func (c *FormattedConnection) setupIncoming(timeout time.Duration) error {
 
 	go func() {
 		// TODO: some other way to make sure this groutine closes
-		c.deadliner.SetReadDeadline(time.Now().Add(c.deadline))
+		c.deadliner.SetReadDeadline(time.Now().Add(60*time.Second))
 		msg, err := c.r.Next()
 		c.deadliner.SetReadDeadline(time.Time{}) // disable read deadline
 		be <- struct {
@@ -265,6 +311,9 @@ func (c *FormattedConnection) setupIncoming(timeout time.Duration) error {
 // Push outgoing message to the connections
 // Read from the incoming new messages and send down the connection
 func (c *FormattedConnection) beginEventProcessing() {
+	//TODO: use a buffer pool
+	go c.sendRoutine()
+
 	var err error
 	var buf []byte
 	for {
@@ -283,6 +332,8 @@ func (c *FormattedConnection) beginEventProcessing() {
 		c.publish(newbuf)
 	}
 
-	c.Close()
-	c.networker.publishClosingConnection(ConnectionWithErr{c, err})
+	cerr := c.Close()
+	if cerr != ErrAlreadyClosed {
+		c.networker.publishClosingConnection(ConnectionWithErr{c, err})
+	}
 }

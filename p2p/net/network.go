@@ -169,6 +169,15 @@ func dial(keepAlive, timeOut time.Duration, address string) (net.Conn, error) {
 	dialer.Timeout = timeOut     // max time bef
 
 	netConn, err := dialer.Dial("tcp", address)
+	if err == nil {
+		tcpconn := netConn.(*net.TCPConn)
+		tcpconn.SetKeepAlive(true)
+		tcpconn.SetKeepAlivePeriod(time.Second * 10)
+		tcpconn.SetNoDelay(true)
+		//tcpconn.SetWriteBuffer(108692)
+		//tcpconn.SetReadBuffer(108692)
+		netConn = tcpconn
+	}
 	return netConn, err
 }
 
@@ -203,7 +212,7 @@ func (n *Net) createSecuredConnection(address string, remotePubkey p2pcrypto.Pub
 		conn.Close()
 		return nil, err
 	}
-	err = conn.Send(handshakeMessage)
+	err = conn.SendNow(handshakeMessage)
 	if err != nil {
 		conn.Close()
 		return nil, err

@@ -85,13 +85,19 @@ func (cm *ConnectionMock) Send(m []byte) error {
 	time.Sleep(time.Duration(cm.sendDelayMs) * time.Millisecond)
 	return cm.sendRes
 }
+func (cm *ConnectionMock) SendNow(m []byte) error {
+	atomic.AddInt32(&cm.sendCnt, int32(1))
+	time.Sleep(time.Duration(cm.sendDelayMs) * time.Millisecond)
+	return cm.sendRes
+}
 
 func (cm ConnectionMock) Closed() bool {
 	return cm.closed
 }
 
-func (cm *ConnectionMock) Close() {
+func (cm *ConnectionMock) Close() error {
 	cm.closed = true
+	return nil
 }
 
 func (cm *ConnectionMock) beginEventProcessing() {

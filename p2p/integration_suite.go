@@ -83,7 +83,7 @@ func (its *IntegrationTestSuite) SetupSuite() {
 	tm := time.Now()
 	testLog("Started up %d swarms", its.BootstrappedNodeCount)
 	//var wg sync.WaitGroup
-	totalTimeout := time.NewTimer((time.Second * 5) * time.Duration(len(swarm)))
+	totalTimeout := time.NewTimer((time.Second * 100) * time.Duration(len(swarm)))
 	finchan := make(chan error)
 	for i := 0; i < len(swarm); i++ {
 		swarm[i] = createP2pInstance(its.T(), cfg)
@@ -141,6 +141,7 @@ lop:
 }
 
 func (its *IntegrationTestSuite) TearDownSuite() {
+	testLog("Shutting down all swarms")
 	_, _ = its.ForAllAsync(context.Background(), func(idx int, s NodeTestInstance) error {
 		s.Shutdown()
 		return nil

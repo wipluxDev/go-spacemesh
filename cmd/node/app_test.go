@@ -27,6 +27,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	//_ "net/http/pprof"
 )
 
 type AppTestSuite struct {
@@ -383,6 +385,7 @@ func TestAppTestSuite(t *testing.T) {
 }
 
 func TestShutdown(t *testing.T) {
+	//go func() {  _ = http.ListenAndServe(":6060", nil) }()
 
 	// make sure previous goroutines has stopped
 	time.Sleep(3 * time.Second)

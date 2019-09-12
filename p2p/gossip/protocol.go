@@ -171,9 +171,12 @@ loop:
 			h := types.CalcMessageHash12(msgV.Message(), msgV.Protocol())
 			prot.Log.With().Debug("new_gossip_message_relay", log.String("protocol", msgV.Protocol()), log.String("hash", util.Bytes2Hex(h[:])))
 			prot.propagateMessage(msgV.Message(), h, msgV.Protocol(), msgV.Sender())
-		case <-prot.shutdown:
-			err = errors.New("protocol shutdown")
-			break loop
+			select {
+			case <-prot.shutdown:
+				break loop
+			default:
+				continue
+			}
 		}
 	}
 	prot.Error("propagate event loop stopped. err: %v", err)

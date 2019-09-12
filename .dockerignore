@@ -1,3 +1,5 @@
+.git/*
+venv/*
 **/gcloud.json
 **/.gitignore
 **/.pytest_cache

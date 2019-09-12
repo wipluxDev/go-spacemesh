@@ -133,11 +133,22 @@ func TestClose(t *testing.T) {
 	rwcam := NewReadWriteCloseAddresserMock()
 	rPub := p2pcrypto.NewRandomPubkey()
 	conn := newConnection(rwcam, netw, rPub, &networkSessionImpl{}, msgSizeLimit, time.Second, netw.logger)
+	c := make(chan struct{},1)
+	netw.SubscribeClosingConnections(func(connection ConnectionWithErr) {
+	c <- struct{}{}
+	})
 
+	rwcam.SetWriteResult(errors.New("x"))
+	rwcam.SetReadResult(nil, errors.New("x"))
 	go conn.beginEventProcessing()
-	conn.Close()
+	//conn.Close()
+	//err := conn.Send([]byte{3, 1,2,3})
+	//assert.NoError(t, err)
 	time.Sleep(time.Millisecond * 1000) // block a little bit
 	assert.Equal(t, 1, rwcam.CloseCount())
+	<-c
+
+
 }
 
 func TestDoubleClose(t *testing.T) {
@@ -150,7 +161,9 @@ func TestDoubleClose(t *testing.T) {
 	conn.Close()
 	time.Sleep(time.Millisecond * 10)
 	assert.Equal(t, 1, rwcam.CloseCount())
-	conn.Close()
+	err := conn.Close()
+	assert.Equal(t, ErrAlreadyClosed, err)
+	assert.Equal(t, 1, rwcam.closeCnt)
 
 	time.Sleep(100 * time.Millisecond) // just check that we don't panic
 }

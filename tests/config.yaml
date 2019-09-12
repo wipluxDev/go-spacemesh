@@ -4,13 +4,13 @@ config_map_name: conf
 
 script_on_exit: '' # Uncomment this to save logs './k8s/log-client-pods.sh'
 
-genesis_delta: 150
+genesis_delta: 35
 single_pod_ready_time_out: 60
-deployment_ready_time_out: 120
+deployment_ready_time_out: 180
 config_path: '../config.toml'
 
 bootstrap:
-  image: 'spacemeshos/go-spacemesh:develop'
+  image: 'spacemeshos/go-spacemesh-dev:p2p_cyddf'
   command: '/bin/go-spacemesh'
   replicas: 1
   resources:
@@ -22,22 +22,22 @@ bootstrap:
       cpu: '2'
   args:
     randcon: '8'
-    hare-committee-size: '50'
-    hare-max-adversaries: '24'
-    hare-round-duration-sec: '10'
-    hare-exp-leaders: '10'
-    layer-duration-sec: '60'
-    layer-average-size: '50'
-    hare-wakeup-delta: '10'
+    hare-committee-size: '130'
+    hare-max-adversaries: '55'
+    hare-round-duration-sec: '30'
+    hare-exp-leaders: '5'
+    layer-duration-sec: '180'
+    layer-average-size: '200'
+    hare-wakeup-delta: '30'
     layers-per-epoch: '3'
     coinbase: '0x4321'
     eligibility-confidence-param: '5'
     eligibility-epoch-offset: '0'
-    genesis-active-size: '50'
+    genesis-active-size: '250'
 client:
-  image: 'spacemeshos/go-spacemesh:develop'
+  image: 'spacemeshos/go-spacemesh-dev:p2p_cyddf'
   command: '/bin/go-spacemesh'
-  replicas: 49
+  replicas: 249
   resources:
     requests:
       memory: '1024M'
@@ -47,18 +47,18 @@ client:
       cpu: '2'
   args:
     randcon: '8'
-    hare-committee-size: '50'
-    hare-max-adversaries: '24'
-    hare-round-duration-sec: '10'
-    hare-exp-leaders: '10'
-    layer-duration-sec: '60'
-    layer-average-size: '50'
-    hare-wakeup-delta: '10'
+    hare-committee-size: '130'
+    hare-max-adversaries: '55'
+    hare-round-duration-sec: '30'
+    hare-exp-leaders: '5'
+    layer-duration-sec: '180'
+    layer-average-size: '200'
+    hare-wakeup-delta: '30'
     layers-per-epoch: '3'
     coinbase: '0x1234'
     eligibility-confidence-param: '5'
     eligibility-epoch-offset: '0'
-    genesis-active-size: '50'
+    genesis-active-size: '250'
 elastic:
   host: elastic.spacemesh.io
   port: 9200
