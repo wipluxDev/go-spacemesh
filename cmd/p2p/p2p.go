@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/spacemeshos/go-spacemesh/activation"
 	"github.com/spacemeshos/go-spacemesh/api"
 	cmdp "github.com/spacemeshos/go-spacemesh/cmd"
+	"github.com/spacemeshos/go-spacemesh/database"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/metrics"
 	"github.com/spacemeshos/go-spacemesh/p2p"
+	"github.com/spacemeshos/post/config"
 	"github.com/spf13/cobra"
 	"net/http"
 	_ "net/http/pprof"
@@ -48,7 +51,7 @@ func (app *P2PApp) Cleanup() {
 func (app *P2PApp) Start(cmd *cobra.Command, args []string) {
 	// init p2p services
 	log.JSONLog(true)
-	log.DebugMode(true)
+	//log.DebugMode(true)
 
 	log.Event().Info("Starting Spacemesh")
 	if app.Config.MemProfile != "" {
@@ -99,8 +102,19 @@ func (app *P2PApp) Start(cmd *cobra.Command, args []string) {
 	api.ApproveAPIGossipMessages(cmdp.Ctx, app.p2p)
 	metrics.StartCollectingMetrics(app.Config.MetricsPort)
 
-	// start the node
+	somelogger := log.NewDefault(fmt.Sprintf("p2p.test.%v", swarm.LocalNode().PublicKey().String()))
 
+	dbStorepath := fmt.Sprintf("./data/%v", config.DefaultDataDirName)
+
+	poetDbStore, err := database.NewLDBDatabase(dbStorepath+"poet", 0, 0, somelogger.WithName("poetDbStore"))
+	if err != nil {
+		panic(err)
+	}
+
+	poetDb := activation.NewPoetDb(poetDbStore, somelogger.WithName("poetDb"))
+	poetListener := activation.NewPoetListener(swarm, poetDb, somelogger.WithName("poetListener"))
+	poetListener.Start()
+	// start the node
 	err = app.p2p.Start()
 	defer app.p2p.Shutdown()
 

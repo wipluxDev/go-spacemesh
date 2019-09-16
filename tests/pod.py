@@ -2,6 +2,7 @@ import re
 import yaml
 import time
 
+from datetime import datetime, timedelta
 from os import path
 from urllib3.exceptions import NewConnectionError, MaxRetryError, ConnectTimeoutError
 from kubernetes import client
@@ -11,16 +12,18 @@ from tests.misc import CoreV1ApiClient
 
 
 def wait_for_pod_to_be_ready(pod_name, name_space, time_out=None):
+    begin = datetime.now()
     total_sleep_time = 0
     while True:
         resp = CoreV1ApiClient().read_namespaced_pod(name=pod_name, namespace=name_space)
+        total_sleep_time = (datetime.now()-begin).total_seconds()
         if resp.status.phase == 'Running':
             print("Total time waiting for pod {0}: {1} sec".format(pod_name, total_sleep_time))
             break
-        time.sleep(1)
-        total_sleep_time += 1
+        print("1 {0} pod isn't ready yet after {1} sec               ".format(pod_name, total_sleep_time), end="\r")
 
-        if time_out and total_sleep_time > time_out:
+
+    if time_out and (datetime.now() - begin).total_seconds() > time_out:
             raise Exception("Timeout waiting to pod to be ready")
 
 

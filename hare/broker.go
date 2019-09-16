@@ -236,7 +236,7 @@ func (b *Broker) Register(id InstanceId) (chan *Msg, error) {
 		b.updateLatestLayer(id)
 
 		if b.isSynced(id) {
-			b.outbox[id] = make(chan *Msg, InboxCapacity)
+			b.outbox[id] = make(chan *Msg, InboxCapacity*5)
 
 			pendingForInstance := b.pending[id]
 			if pendingForInstance != nil {

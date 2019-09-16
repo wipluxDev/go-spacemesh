@@ -187,7 +187,7 @@ def test_many_gossip_messages(setup_clients, add_curl):
 
 def test_many_gossip_sim(setup_clients, add_curl):
     fields = {'M': 'new_gossip_message', 'protocol': 'api_test_gossip'}
-    TEST_MESSAGES = 100
+    TEST_MESSAGES = 300
 
     initial = len(query_message(current_index, testconfig['namespace'], setup_clients.deployment_name, fields))
 
@@ -199,7 +199,7 @@ def test_many_gossip_sim(setup_clients, add_curl):
 
         # todo: take out broadcast and rpcs to helper methods.
         api = 'v1/broadcast'
-        data = '{"data":"nil", "size": 100000 }'
+        data = '{"data":"nil", "size": 108692 }'
         out = api_call(client_ip, data, api, testconfig['namespace'])
         assert "{'value': 'ok'}" in out
 

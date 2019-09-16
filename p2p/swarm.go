@@ -579,7 +579,12 @@ func (s *swarm) ProcessGossipProtocolMessage(sender p2pcrypto.PublicKey, protoco
 	}
 	s.lNode.Debug("Forwarding message to %v protocol", protocol)
 
-	msgchan <- gossipProtocolMessage{sender, data, validationCompletedChan}
+	select {
+	case msgchan <- gossipProtocolMessage{sender, data, validationCompletedChan}:
+		break
+	default:
+		s.lNode.Log.With().Warning("Push to protocol failed, queue is full", log.String("protocol", protocol), log.Int("len", len(msgchan)), log.Int("cap", cap(msgchan)))
+	}
 
 	return nil
 }

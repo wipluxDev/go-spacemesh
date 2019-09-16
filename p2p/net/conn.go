@@ -198,9 +198,7 @@ func (c *FormattedConnection) SendNow(m []byte) error {
 func (c *FormattedConnection) sendRoutine() {
 	for {
 		b := <-c.sendQueue
-		t := time.Now()
 		err := c.SendNow(b.b)
-		c.logger.Info("SEND TOOK - %v ", time.Since(t))
 		b.res <- err
 		if err != nil {
 			break
