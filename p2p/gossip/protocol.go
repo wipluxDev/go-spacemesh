@@ -97,23 +97,23 @@ func (prot *Protocol) propagateMessage(payload []byte, h types.Hash12, nextProt 
 		peers = append(peers, p)
 	}
 	prot.peersMutex.RUnlock()
-	var wg sync.WaitGroup
+	//var wg sync.WaitGroup
 peerLoop:
 	for _, p := range peers {
 		if exclude == p {
 			continue peerLoop
 		}
-		wg.Add(1)
-		go func(pubkey p2pcrypto.PublicKey) {
+		//wg.Add(1)
+		//go func(pubkey p2pcrypto.PublicKey) {
 			// TODO: replace peer ?
-			err := prot.net.SendMessage(pubkey, nextProt, payload)
+			err := prot.net.SendMessage(p, nextProt, payload)
 			if err != nil {
-				prot.Warning("Failed sending msg %v to %v, reason=%v", h, pubkey, err)
+				prot.Warning("Failed sending msg %v to %v, reason=%v", h, p, err)
 			}
-			wg.Done()
-		}(p)
+			//wg.Done()
+		//}(p)
 	}
-	wg.Wait()
+	//wg.Wait()
 }
 
 // Broadcast is the actual broadcast procedure - process the message internally and loop on peers and add the message to their queues
