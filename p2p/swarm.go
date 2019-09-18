@@ -119,9 +119,12 @@ func newSwarm(ctx context.Context, config config.Config, newNode bool, persist b
 		l, err = node.NewLocalNode(config, address, persist)
 	}
 
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a node, err: %v", err)
 	}
+
+	l.NodeInfo.DiscoveryPort = l.NodeInfo.ProtocolPort+1
 
 	n, err := net.NewNet(config, l)
 	if err != nil {

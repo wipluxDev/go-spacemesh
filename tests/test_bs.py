@@ -65,7 +65,7 @@ def get_conf(bs_info, client_config, setup_oracle=None, setup_poet=None, args=No
     if setup_poet:
         client_args['poet_server'] = '{0}:{1}'.format(setup_poet, POET_SERVER_PORT)
 
-    cspec.append_args(bootnodes=node_string(bs_info['key'], bs_info['pod_ip'], BOOTSTRAP_PORT, BOOTSTRAP_PORT),
+    cspec.append_args(bootnodes=node_string(bs_info['key'], bs_info['pod_ip'], BOOTSTRAP_PORT, BOOTSTRAP_PORT+1),
                       genesis_time=GENESIS_TIME.isoformat('T', 'seconds'))
 
     if len(client_args) > 0:
