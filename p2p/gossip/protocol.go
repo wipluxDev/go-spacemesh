@@ -1,7 +1,6 @@
 package gossip
 
 import (
-	"errors"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/common/util"
 	"github.com/spacemeshos/go-spacemesh/log"
@@ -20,6 +19,7 @@ const protocolVer = "0"
 
 // Interface for the underlying p2p layer
 type baseNetwork interface {
+	Peers() []p2pcrypto.PublicKey
 	SendMessage(peerPubkey p2pcrypto.PublicKey, protocol string, payload []byte) error
 	RegisterDirectProtocol(protocol string) chan service.DirectMessage
 	SubscribePeerEvents() (conn chan p2pcrypto.PublicKey, disc chan p2pcrypto.PublicKey)
@@ -91,29 +91,31 @@ func (prot *Protocol) markMessageAsOld(h types.Hash12) bool {
 }
 
 func (prot *Protocol) propagateMessage(payload []byte, h types.Hash12, nextProt string, exclude p2pcrypto.PublicKey) {
-	prot.peersMutex.RLock()
-	peers := make([]p2pcrypto.PublicKey, 0, len(prot.peers))
-	for p := range prot.peers {
-		peers = append(peers, p)
-	}
-	prot.peersMutex.RUnlock()
-	var wg sync.WaitGroup
+	//prot.peersMutex.RLock()
+	//peers := make([]p2pcrypto.PublicKey, 0, len(prot.peers))
+	//for p := range prot.peers {
+	//	peers = append(peers, p)
+	//}
+	//prot.Info("About to propagate message to %v", spew.Sdump(peers))
+	//prot.peersMutex.RUnlock()
+	peers := prot.net.Peers()
+	//var wg sync.WaitGroup
 peerLoop:
 	for _, p := range peers {
 		if exclude == p {
 			continue peerLoop
 		}
-		wg.Add(1)
-		go func(pubkey p2pcrypto.PublicKey) {
+		//wg.Add(1)
+		//go func(pubkey p2pcrypto.PublicKey) {
 			// TODO: replace peer ?
 			err := prot.net.SendMessage(p, nextProt, payload)
 			if err != nil {
-				prot.Warning("Failed sending msg %v to %v, reason=%v", h, p, err)
+				prot.Warning("Failed sending %v msg %v to %v, reason=%v", nextProt, h, p, err)
 			}
-			wg.Done()
-		}(p)
+			//wg.Done()
+		//}(p)
 	}
-	wg.Wait()
+	//wg.Wait()
 }
 
 // Broadcast is the actual broadcast procedure - process the message internally and loop on peers and add the message to their queues
@@ -125,24 +127,24 @@ func (prot *Protocol) Broadcast(payload []byte, nextProt string) error {
 
 // Start a loop that process peers events
 func (prot *Protocol) Start() {
-	peerConn, peerDisc := prot.net.SubscribePeerEvents() // this was start blocks until we registered.
-	go prot.eventLoop(peerConn, peerDisc)
+	//peerConn, peerDisc := prot.net.SubscribePeerEvents() // this was start blocks until we registered.
+	//go prot.eventLoop(peerConn, peerDisc)
 	go prot.propagationEventLoop() // TODO consider running several consumers
 }
 
-func (prot *Protocol) addPeer(peer p2pcrypto.PublicKey) {
-	prot.peersMutex.Lock()
-	prot.peers[peer] = newPeer(prot.net, peer, prot.Log)
-	prot.Log.With().Info("adding peer", log.String("peer", peer.String()))
-	prot.peersMutex.Unlock()
-}
-
-func (prot *Protocol) removePeer(peer p2pcrypto.PublicKey) {
-	prot.peersMutex.Lock()
-	delete(prot.peers, peer)
-	prot.Log.With().Info("deleting peer", log.String("peer", peer.String()))
-	prot.peersMutex.Unlock()
-}
+//func (prot *Protocol) addPeer(peer p2pcrypto.PublicKey) {
+//	prot.peersMutex.Lock()
+//	prot.peers[peer] = newPeer(prot.net, peer, prot.Log)
+//	prot.Log.With().Info("adding peer", log.String("peer", peer.String()))
+//	prot.peersMutex.Unlock()
+//}
+//
+//func (prot *Protocol) removePeer(peer p2pcrypto.PublicKey) {
+//	prot.peersMutex.Lock()
+//	delete(prot.peers, peer)
+//	prot.Log.With().Info("deleting peer", log.String("peer", peer.String()))
+//	prot.peersMutex.Unlock()
+//}
 
 func (prot *Protocol) processMessage(sender p2pcrypto.PublicKey, protocol string, msg service.Data) error {
 	h := types.CalcMessageHash12(msg.Bytes(), protocol)
@@ -185,37 +187,37 @@ loop:
 func (prot *Protocol) Relay(sender p2pcrypto.PublicKey, protocol string, msg service.Data) error {
 	return prot.processMessage(sender, protocol, msg)
 }
-
-func (prot *Protocol) eventLoop(peerConn chan p2pcrypto.PublicKey, peerDisc chan p2pcrypto.PublicKey) {
-	// TODO: replace with p2p.Peers
-	var err error
-loop:
-	for {
-		select {
-		case peer := <-peerConn:
-			go prot.addPeer(peer)
-		case peer := <-peerDisc:
-			go prot.removePeer(peer)
-		case <-prot.shutdown:
-			err = errors.New("protocol shutdown")
-			break loop
-		}
-	}
-	prot.Error("Gossip protocol event loop stopped. err: %v", err)
-}
-
-// peersCount returns the number of peers known to the protocol, used for testing only
-func (prot *Protocol) peersCount() int {
-	prot.peersMutex.RLock()
-	cnt := len(prot.peers)
-	prot.peersMutex.RUnlock()
-	return cnt
-}
-
-// hasPeer returns whether or not a peer is known to the protocol, used for testing only
-func (prot *Protocol) hasPeer(key p2pcrypto.PublicKey) bool {
-	prot.peersMutex.RLock()
-	_, ok := prot.peers[key]
-	prot.peersMutex.RUnlock()
-	return ok
-}
+//
+//func (prot *Protocol) eventLoop(peerConn chan p2pcrypto.PublicKey, peerDisc chan p2pcrypto.PublicKey) {
+//	// TODO: replace with p2p.Peers
+//	var err error
+//loop:
+//	for {
+//		select {
+//		case peer := <-peerConn:
+//			go prot.addPeer(peer)
+//		case peer := <-peerDisc:
+//			go prot.removePeer(peer)
+//		case <-prot.shutdown:
+//			err = errors.New("protocol shutdown")
+//			break loop
+//		}
+//	}
+//	prot.Error("Gossip protocol event loop stopped. err: %v", err)
+//}
+//
+//// peersCount returns the number of peers known to the protocol, used for testing only
+//func (prot *Protocol) peersCount() int {
+//	prot.peersMutex.RLock()
+//	cnt := len(prot.peers)
+//	prot.peersMutex.RUnlock()
+//	return cnt
+//}
+//
+//// hasPeer returns whether or not a peer is known to the protocol, used for testing only
+//func (prot *Protocol) hasPeer(key p2pcrypto.PublicKey) bool {
+//	prot.peersMutex.RLock()
+//	_, ok := prot.peers[key]
+//	prot.peersMutex.RUnlock()
+//	return ok
+//}

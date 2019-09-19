@@ -17,6 +17,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"github.com/spacemeshos/go-spacemesh/timesync"
 	timeSyncConfig "github.com/spacemeshos/go-spacemesh/timesync/config"
+	"runtime"
 	"strings"
 
 	inet "net"
@@ -123,8 +124,6 @@ func newSwarm(ctx context.Context, config config.Config, newNode bool, persist b
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a node, err: %v", err)
 	}
-
-	l.NodeInfo.DiscoveryPort = l.NodeInfo.ProtocolPort+1
 
 	n, err := net.NewNet(config, l)
 	if err != nil {
@@ -243,7 +242,7 @@ func (s *swarm) Start() error {
 	}
 
 	s.lNode.Debug("Starting to listen for network messages")
-	s.listenToNetworkMessages() // fires up a goroutine for each queue of messages
+	go s.listenToNetworkMessages() // fires up a goroutine for each queue of messages
 	s.lNode.Debug("starting the udp server")
 
 	// TODO : insert new addresses to discovery
@@ -362,6 +361,17 @@ func (s *swarm) sendMessageImpl(peerPubKey p2pcrypto.PublicKey, protocol string,
 	dur := time.Since(start)
 	if dur > 10*time.Second {
 		s.lNode.Info("send took more than 10s: msgtype: %v, size: %v, dur: %v, err: %v", protocol, len(final), dur, err)
+		if err != nil {
+			buf := make([]byte, 1024)
+			for {
+				n := runtime.Stack(buf, true)
+				if n < len(buf) {
+					break
+				}
+				buf = make([]byte, 2*len(buf))
+			}
+			s.lNode.Error(string(buf))
+		}
 	}
 
 	return err
@@ -378,7 +388,7 @@ func (s *swarm) RegisterDirectProtocol(protocol string) chan service.DirectMessa
 
 // RegisterGossipProtocol registers an handler for gossip based `protocol`
 func (s *swarm) RegisterGossipProtocol(protocol string) chan service.GossipMessage {
-	mchan := make(chan service.GossipMessage, s.config.BufferSize)
+	mchan := make(chan service.GossipMessage, 1024*10)
 	s.protocolHandlerMutex.Lock()
 	s.gossipProtocolHandlers[protocol] = mchan
 	s.protocolHandlerMutex.Unlock()
@@ -388,8 +398,9 @@ func (s *swarm) RegisterGossipProtocol(protocol string) chan service.GossipMessa
 // Shutdown sends a shutdown signal to all running services of swarm and then runs an internal shutdown to cleanup.
 func (s *swarm) Shutdown() {
 	close(s.shutdown)
-	s.network.Shutdown()
+	s.gossip.Close()
 	s.cPool.Shutdown()
+	s.network.Shutdown()
 	s.udpServer.Shutdown()
 	s.discover.Shutdown()
 
@@ -436,21 +447,31 @@ func (s *swarm) listenToNetworkMessages() {
 	// It's net's responsibility to distribute the messages to the queues
 	// in a way that they're processing order will work
 	// swarm process all the queues concurrently but synchronously for each queue
-
+	//mainch := make(chan net.IncomingMessageEvent, 1000)
 	netqueues := s.network.IncomingMessages()
-	for nq := range netqueues { // run a separate worker for each queue.
-		go func(c chan net.IncomingMessageEvent) {
-			for {
-				select {
-				case msg := <-c:
-					s.processMessage(msg)
-				case <-s.shutdown:
-					return
-				}
-			}
-		}(netqueues[nq])
-	}
+	//for nq := range netqueues { // run a separate worker for each queue.
+	//	go func(c chan net.IncomingMessageEvent) {
+	//		for {
+	//			select {
+	//			case msg := <-c:
+	//				s.processMessage(msg)
+	//			case <-s.shutdown:
+	//				return
+	//			}
+	//		}
+	//	}(netqueues[nq])
+	//}
 
+
+
+	for {
+		select {
+		case msg := <-netqueues:
+			s.processMessage(msg)
+		case <-s.shutdown:
+			return
+		}
+	}
 }
 
 // periodically checks that our clock is sync
@@ -584,7 +605,7 @@ func (s *swarm) ProcessGossipProtocolMessage(sender p2pcrypto.PublicKey, protoco
 
 	select {
 	case msgchan <- gossipProtocolMessage{sender, data, validationCompletedChan}:
-		break
+		return nil
 	default:
 		s.lNode.Log.With().Warning("Push to protocol failed, queue is full", log.String("protocol", protocol), log.Int("len", len(msgchan)), log.Int("cap", cap(msgchan)))
 	}
@@ -840,6 +861,21 @@ func (s *swarm) addIncomingPeer(n p2pcrypto.PublicKey) error {
 		metrics.InboundPeers.Add(1)
 	}
 	return nil
+}
+
+func (s *swarm) Peers() []p2pcrypto.PublicKey {
+	s.inpeersMutex.RLock()
+	s.outpeersMutex.RLock()
+	peers := make([]p2pcrypto.PublicKey, 0, len(s.inpeers)+len(s.outpeers))
+	for  p := range s.inpeers {
+		peers = append(peers, p)
+	}
+	for p := range s.outpeers {
+		peers = append(peers, p)
+	}
+	s.outpeersMutex.RUnlock()
+	s.inpeersMutex.RUnlock()
+	return peers
 }
 
 func (s *swarm) hasIncomingPeer(peer p2pcrypto.PublicKey) bool {

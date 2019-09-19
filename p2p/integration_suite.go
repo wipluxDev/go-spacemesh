@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
 	"net"
-	"sync"
 	"testing"
 	"time"
 )
@@ -108,6 +107,12 @@ func (its *IntegrationTestSuite) SetupSuite() {
 				finchan <- err
 				return
 			}
+
+			//err = swarm[i].waitForGossip()
+			//if err != nil {
+			//	finchan <- err
+			//	return
+			//}
 			if its.AfterHook != nil {
 				its.AfterHook(i, swarm[i])
 			}
@@ -142,10 +147,10 @@ lop:
 
 func (its *IntegrationTestSuite) TearDownSuite() {
 	testLog("Shutting down all swarms")
-	_, _ = its.ForAllAsync(context.Background(), func(idx int, s NodeTestInstance) error {
+	_ = its.ForAll(func(idx int, s NodeTestInstance) error {
 		s.Shutdown()
 		return nil
-	})
+	}, nil)
 }
 
 func createP2pInstance(t testing.TB, config config.Config) *swarm {
@@ -180,23 +185,17 @@ boots:
 	return e
 }
 
-func (its *IntegrationTestSuite) ForAllAsync(ctx context.Context, f func(idx int, s NodeTestInstance) error) (error, []error) {
-	var mtx sync.Mutex
-	errs := make([]error, len(its.Instances))
-
+func (its *IntegrationTestSuite) ForAllAsync(ctx context.Context, f func(idx int, s NodeTestInstance) error) (error) {
 	group, ctx := errgroup.WithContext(ctx)
 	for i, s := range its.Instances {
 		i, s := i, s
 		group.Go(func() error {
 			e := f(i, s)
-			mtx.Lock()
-			errs[i] = e
-			mtx.Unlock()
 			return e
 		})
 	}
 
-	return group.Wait(), errs
+	return group.Wait()
 }
 
 func testLog(text string, args ...interface{}) {

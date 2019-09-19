@@ -77,10 +77,10 @@ func (p *protocol) GetAddresses(server p2pcrypto.PublicKey) ([]*node.NodeInfo, e
 	timeout := time.NewTimer(MessageTimeout)
 	select {
 	case nodes := <-ch:
+		p.logger.With().Debug("getaddress_time_to_recv", log.Int("size", len(nodes)), log.String("from", server.String()), log.Duration("time_elapsed", time.Now().Sub(start)))
 		if nodes == nil {
 			return nil, errors.New("empty result set")
 		}
-		p.logger.With().Debug("getaddress_time_to_recv", log.String("from", server.String()), log.Duration("time_elapsed", time.Now().Sub(start)))
 		return nodes, nil
 	case <-timeout.C:
 		return nil, errors.New("request timed out")

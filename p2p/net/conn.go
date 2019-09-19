@@ -52,7 +52,6 @@ type Connection interface {
 	SetSession(session NetworkSession)
 
 	Send(m []byte) error
-	SendNow(m []byte) error
 	Close() error
 	Closed() bool
 }
@@ -173,16 +172,12 @@ func (c *FormattedConnection) publish(message []byte) {
 	c.networker.EnqueueMessage(IncomingMessageEvent{c, message})
 }
 
-// Send binary data to a connection
-// data is copied over so caller can get rid of the data
-// Concurrency: can be called from any go routine
-func (c *FormattedConnection) SendNow(m []byte) error {
+func (c * FormattedConnection) Send(m []byte) error {
 	c.wmtx.Lock()
 	defer c.wmtx.Unlock()
 	if c.closed {
 		return fmt.Errorf("connection was closed")
 	}
-
 	c.deadliner.SetWriteDeadline(time.Now().Add(c.deadline))
 	_, err := c.w.WriteRecord(m)
 	if err != nil {
@@ -192,31 +187,8 @@ func (c *FormattedConnection) SendNow(m []byte) error {
 		}
 		return err
 	}
+	//metrics.PeerRecv.With(metrics.PeerIdLabel, c.remotePub.String()).Add(float64(len(m)))
 	return nil
-}
-
-func (c *FormattedConnection) sendRoutine() {
-	for {
-		b := <-c.sendQueue
-		err := c.SendNow(b.b)
-		b.res <- err
-		if err != nil {
-			break
-		}
-	}
-}
-
-func (c * FormattedConnection) Send(m []byte) error {
-	c.wmtx.Lock()
-	if c.closed {
-		c.wmtx.Unlock()
-		return fmt.Errorf("connection was closed")
-	}
-	c.wmtx.Unlock()
-
-	res := make(chan error, 1)
-	c.sendQueue <- queuedMessage{m, res }
-	return <-res
 }
 
 var ErrAlreadyClosed = errors.New("connection is already closed")
@@ -310,8 +282,6 @@ func (c *FormattedConnection) setupIncoming(timeout time.Duration) error {
 // Read from the incoming new messages and send down the connection
 func (c *FormattedConnection) beginEventProcessing() {
 	//TODO: use a buffer pool
-	go c.sendRoutine()
-
 	var err error
 	var buf []byte
 	for {

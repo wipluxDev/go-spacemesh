@@ -352,7 +352,7 @@ func TestSwarm_MultipleMessagesFromMultipleSendersToMultipleProtocols(t *testing
 	var protos []string
 
 	for i := 0; i < Protos; i++ {
-		prt := RandString(10)
+		prt := RandString( 10) // 10mb
 		protos = append(protos, prt)
 		exchan := p1.RegisterDirectProtocol(prt)
 
@@ -379,6 +379,7 @@ func TestSwarm_MultipleMessagesFromMultipleSendersToMultipleProtocols(t *testing
 	sa := &swarmArray{}
 	for i := 0; i < Senders; i++ {
 		wg.Add(1)
+		payload := []byte(RandString( 10 << 20))
 		go func() {
 			p := p2pTestNoStart(t, cfg)
 			require.NoError(t, p.Start())
@@ -393,7 +394,6 @@ func TestSwarm_MultipleMessagesFromMultipleSendersToMultipleProtocols(t *testing
 				randProto--
 			}
 
-			payload := []byte(RandString(10))
 			_, err := p.cPool.GetConnection(p1.network.LocalAddr().String(), p1.lNode.PublicKey())
 			require.NoError(t, err)
 			err = p.SendMessage(p1.lNode.PublicKey(), protos[randProto], payload)

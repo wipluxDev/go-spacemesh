@@ -58,7 +58,7 @@ type Net struct {
 	closingConnections []func(ConnectionWithErr)
 
 	queuesCount           uint
-	incomingMessagesQueue []chan IncomingMessageEvent
+	incomingMessagesQueue chan IncomingMessageEvent
 
 	config config.Config
 }
@@ -74,7 +74,7 @@ type NewConnectionEvent struct {
 func NewNet(conf config.Config, localEntity *node.LocalNode) (*Net, error) {
 
 	qcount := DefaultQueueCount      // todo : get from cfg
-	qsize := DefaultMessageQueueSize // todo : get from cfg
+	//qsize := DefaultMessageQueueSize // todo : get from cfg
 
 	tcpAddress := &net.TCPAddr{localEntity.IP, int(localEntity.ProtocolPort), ""}
 
@@ -86,13 +86,13 @@ func NewNet(conf config.Config, localEntity *node.LocalNode) (*Net, error) {
 		regNewRemoteConn:      make([]func(NewConnectionEvent), 0, 3),
 		closingConnections:    make([]func(cwe ConnectionWithErr), 0, 3),
 		queuesCount:           qcount,
-		incomingMessagesQueue: make([]chan IncomingMessageEvent, qcount, qcount),
+		incomingMessagesQueue: make(chan IncomingMessageEvent, 1024*20),
 		config:                conf,
 	}
 
-	for imq := range n.incomingMessagesQueue {
-		n.incomingMessagesQueue[imq] = make(chan IncomingMessageEvent, qsize)
-	}
+	//for imq := range n.incomingMessagesQueue {
+	//	n.incomingMessagesQueue[imq] = make(chan IncomingMessageEvent, qsize)
+	//}
 
 	return n, nil
 }
@@ -137,13 +137,12 @@ func sumByteArray(b []byte) uint {
 // EnqueueMessage inserts a message into a queue, to decide on which queue to send the message to
 // it sum the remote public key bytes as integer to segment to queueCount queues.
 func (n *Net) EnqueueMessage(event IncomingMessageEvent) {
-	sba := sumByteArray(event.Conn.RemotePublicKey().Bytes())
-	n.incomingMessagesQueue[sba%n.queuesCount] <- event
+	n.incomingMessagesQueue <- event
 }
 
 // IncomingMessages returns a slice of channels which incoming messages are delivered on
 // the receiver should iterate  on all the channels and read all messages. to sync messages order but enable parallel messages handling.
-func (n *Net) IncomingMessages() []chan IncomingMessageEvent {
+func (n *Net) IncomingMessages() chan IncomingMessageEvent {
 	return n.incomingMessagesQueue
 }
 
@@ -170,13 +169,13 @@ func dial(keepAlive, timeOut time.Duration, address string) (net.Conn, error) {
 
 	netConn, err := dialer.Dial("tcp", address)
 	if err == nil {
-		tcpconn := netConn.(*net.TCPConn)
-		tcpconn.SetKeepAlive(true)
-		tcpconn.SetKeepAlivePeriod(time.Second * 10)
-		tcpconn.SetNoDelay(true)
+		//tcpconn := netConn.(*net.TCPConn)
+		//tcpconn.SetKeepAlive(true)
+		//tcpconn.SetKeepAlivePeriod(time.Second * 10)
+		//tcpconn.SetNoDelay(false)
 		//tcpconn.SetWriteBuffer(108692)
 		//tcpconn.SetReadBuffer(108692)
-		netConn = tcpconn
+		//netConn = tcpconn
 	}
 	return netConn, err
 }
@@ -212,7 +211,7 @@ func (n *Net) createSecuredConnection(address string, remotePubkey p2pcrypto.Pub
 		conn.Close()
 		return nil, err
 	}
-	err = conn.SendNow(handshakeMessage)
+	err = conn.Send(handshakeMessage)
 	if err != nil {
 		conn.Close()
 		return nil, err
