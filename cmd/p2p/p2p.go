@@ -9,6 +9,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/metrics"
 	"github.com/spacemeshos/go-spacemesh/p2p"
+	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"github.com/spacemeshos/post/config"
 	"github.com/spf13/cobra"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"time"
 )
 
 // Cmd is the p2p cmd
@@ -114,6 +116,22 @@ func (app *P2PApp) Start(cmd *cobra.Command, args []string) {
 	poetDb := activation.NewPoetDb(poetDbStore, somelogger.WithName("poetDb"))
 	poetListener := activation.NewPoetListener(swarm, poetDb, somelogger.WithName("poetListener"))
 	poetListener.Start()
+
+	for a := 'a'; a < 10; a++ {
+		c := app.p2p.RegisterGossipProtocol(string(a))
+		go func(a string, c chan service.GossipMessage) {
+			log.Info("Registered protocol %v, starting to approve messages", a)
+			for {
+				select {
+				case msg := <-c:
+					msg.ReportValidation(a)
+				case <-cmdp.Ctx.Done():
+					return
+				}
+			}
+		}(string(a), c)
+	}
+
 	// start the node
 	err = app.p2p.Start()
 	defer app.p2p.Shutdown()
@@ -135,6 +153,24 @@ func (app *P2PApp) Start(cmd *cobra.Command, args []string) {
 		json := api.NewJSONHTTPServer()
 		json.StartService()
 	}
+
+	go func() {
+		time.Sleep(10 * time.Second)
+		for {
+			select {
+			case <-cmdp.Ctx.Done():
+				return
+			default:
+				break
+			}
+			log.Info("Propagating messages")
+			for a := 'a'; a < 10; a++ {
+				err := app.p2p.Broadcast(string(a), []byte(api.RandString(100000)))
+				log.Error("Err broadcasting random message err:%v", err)
+			}
+			time.Sleep(10 * time.Second)
+		}
+	}()
 
 	<-cmdp.Ctx.Done()
 }

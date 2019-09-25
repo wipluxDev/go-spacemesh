@@ -9,6 +9,7 @@ import (
 	"github.com/spacemeshos/post/shared"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const AtxProtocol = "AtxGossip"
@@ -462,6 +463,7 @@ func (b *Builder) PublishActivationTx(epoch types.EpochId) error {
 	b.challenge = nil
 	b.posLayerID = 0
 
+	time.Sleep(10 * time.Second)
 	err = b.net.Broadcast(AtxProtocol, buf)
 	if err != nil {
 		return err

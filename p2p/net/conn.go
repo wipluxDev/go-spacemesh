@@ -1,11 +1,14 @@
 package net
 
 import (
+	"context"
 	"errors"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/config"
 	"github.com/spacemeshos/go-spacemesh/p2p/delimited"
 	"github.com/spacemeshos/go-spacemesh/p2p/p2pcrypto"
+	"io/ioutil"
+	"runtime"
 	"time"
 
 	"fmt"
@@ -33,10 +36,9 @@ const (
 )
 
 type queuedMessage struct {
-	b []byte
+	b   []byte
 	res chan error
 }
-
 
 // Connection is an interface stating the API of all secured connections in the system
 type Connection interface {
@@ -127,7 +129,7 @@ func newConnection(conn readWriteCloseAddresser, netw networker,
 		networker:    netw,
 		session:      session,
 		msgSizeLimit: msgSizeLimit,
-		sendQueue: make(chan queuedMessage, 100),
+		sendQueue:    make(chan queuedMessage, 100),
 	}
 
 	return connection
@@ -172,14 +174,39 @@ func (c *FormattedConnection) publish(message []byte) {
 	c.networker.EnqueueMessage(IncomingMessageEvent{c, message})
 }
 
-func (c * FormattedConnection) Send(m []byte) error {
+func (c *FormattedConnection) Send(m []byte) error {
 	c.wmtx.Lock()
 	defer c.wmtx.Unlock()
 	if c.closed {
 		return fmt.Errorf("connection was closed")
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func(ctx context.Context) {
+		timer := time.NewTimer(time.Second*20)
+		select {
+			case <-timer.C:
+				i := crypto.UUIDString()
+				c.logger.With().Info("sending message is taking more than 20 seconds", log.String("peer", c.RemotePublicKey().String()), log.String("file", fmt.Sprintf("/tmp/stacktrace%v", i)))
+					buf := make([]byte, 1024)
+					for {
+						n := runtime.Stack(buf, true)
+						if n < len(buf) {
+							break
+						}
+						buf = make([]byte, 2*len(buf))
+					}
+					err := ioutil.WriteFile(fmt.Sprintf("/tmp/stacktrace%v",i), buf, 0644)
+					if err != nil {
+						c.logger.Error("ERR WIRTING FILE %v", err)
+					}
+			case <-ctx.Done():
+				return
+		}
+	}(ctx)
 	c.deadliner.SetWriteDeadline(time.Now().Add(c.deadline))
 	_, err := c.w.WriteRecord(m)
+	cancel()
 	if err != nil {
 		cerr := c.closeUnlocked()
 		if cerr != ErrAlreadyClosed {
@@ -233,7 +260,7 @@ func (c *FormattedConnection) setupIncoming(timeout time.Duration) error {
 
 	go func() {
 		// TODO: some other way to make sure this groutine closes
-		c.deadliner.SetReadDeadline(time.Now().Add(60*time.Second))
+		c.deadliner.SetReadDeadline(time.Now().Add(60 * time.Second))
 		msg, err := c.r.Next()
 		c.deadliner.SetReadDeadline(time.Time{}) // disable read deadline
 		be <- struct {

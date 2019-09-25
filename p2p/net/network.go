@@ -12,6 +12,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	//"syscall"
 	"time"
 )
 
@@ -73,7 +74,7 @@ type NewConnectionEvent struct {
 // It attempts to tcp listen on address. e.g. localhost:1234 .
 func NewNet(conf config.Config, localEntity *node.LocalNode) (*Net, error) {
 
-	qcount := DefaultQueueCount      // todo : get from cfg
+	qcount := DefaultQueueCount // todo : get from cfg
 	//qsize := DefaultMessageQueueSize // todo : get from cfg
 
 	tcpAddress := &net.TCPAddr{localEntity.IP, int(localEntity.ProtocolPort), ""}
@@ -164,20 +165,72 @@ func (n *Net) publishClosingConnection(connection ConnectionWithErr) {
 func dial(keepAlive, timeOut time.Duration, address string) (net.Conn, error) {
 	// connect via dialer so we can set tcp network params
 	dialer := &net.Dialer{}
-	dialer.KeepAlive = keepAlive // drop connections after a period of inactivity
-	dialer.Timeout = timeOut     // max time bef
+	//dialer.KeepAlive = keepAlive // drop connections after a period of inactivity
+	//dialer.Timeout = timeOut     // max time bef
 
 	netConn, err := dialer.Dial("tcp", address)
 	if err == nil {
-		//tcpconn := netConn.(*net.TCPConn)
-		//tcpconn.SetKeepAlive(true)
-		//tcpconn.SetKeepAlivePeriod(time.Second * 10)
-		//tcpconn.SetNoDelay(false)
-		//tcpconn.SetWriteBuffer(108692)
-		//tcpconn.SetReadBuffer(108692)
+		tcpconn := netConn.(*net.TCPConn)
+		SetKeepAliveParams(tcpconn)
+		return tcpconn, nil
 		//netConn = tcpconn
 	}
 	return netConn, err
+}
+
+func SetKeepAliveParams(tcpconn *net.TCPConn) {
+
+	tcpconn.SetKeepAlive(true)
+	tcpconn.SetKeepAlivePeriod(time.Second * 30)
+	tcpconn.SetReadBuffer(4096)
+	tcpconn.SetWriteBuffer(4096)
+	//
+	//rawConn, err := tcpconn.SyscallConn()
+	//if err != nil {
+	//	log.Warning("on getting raw connection object for keepalive parameter setting", err.Error())
+	//	return
+	//}
+	//
+	//err = rawConn.Control(
+	//	func(fdPtr uintptr) {
+	//		// got socket file descriptor. Setting parameters.
+	//		fd := int(fdPtr)
+	//		//Number of probes.
+	//		err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, 3)
+	//		if err != nil {
+	//			log.Warning("on setting keepalive probe count", err.Error())
+	//		}
+	//		//Wait time after an unsuccessful probe.
+	//		err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, 3)
+	//		if err != nil {
+	//			log.Warning("on setting keepalive retry interval", err.Error())
+	//		}
+	//	})
+	//
+	//if err != nil {
+	//	log.Warning("Error using control")
+	//	return
+	//}
+
+	//sockFile, sockErr := tcpconn.File()
+	//if sockErr == nil {
+	//	// got socket file handle. Getting descriptor.
+	//	fd := int(sockFile.Fd())
+	//	// Ping amount
+	//	err := syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, 3)
+	//	if err != nil {
+	//		log.Warning("on setting keepalive probe count", err.Error())
+	//	}
+	//	// Retry interval
+	//	err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, 5)
+	//	if err != nil {
+	//		log.Warning("on setting keepalive retry interval", err.Error())
+	//	}
+	//	// don't forget to close the file. No worries, it will *not* cause the connection to close.
+	//	sockFile.Close()
+	//} else {
+	//	log.Warning("on setting socket keepalive", sockErr.Error())
+	//}
 }
 
 func (n *Net) createConnection(address string, remotePub p2pcrypto.PublicKey, session NetworkSession,
@@ -296,6 +349,8 @@ func (n *Net) accept(listen net.Listener) {
 			continue
 		}
 
+		conn := netConn.(*net.TCPConn)
+		SetKeepAliveParams(conn)
 		n.logger.Debug("Got new connection... Remote Address: %s", netConn.RemoteAddr())
 		c := newConnection(netConn, n, nil, nil, n.config.MsgSizeLimit, n.config.ResponseTimeout, n.logger)
 		go func(con Connection) {

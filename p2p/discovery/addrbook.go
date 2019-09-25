@@ -661,7 +661,7 @@ func NewAddrBook(localAddress *node.NodeInfo, config config.SwarmConfig, logger 
 		}
 
 		am.wg.Add(1)
-		go func () { am.saveRoutine(); am.wg.Done()}()
+		go func() { am.saveRoutine(); am.wg.Done() }()
 	}
 	return &am
 }

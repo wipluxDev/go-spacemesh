@@ -193,6 +193,25 @@ func calcHdistRange(id types.LayerID, hdist types.LayerID) (bottom types.LayerID
 	return bottom, top
 }
 
+type blockDB interface {
+	LayerBlockIds(id types.LayerID) ([]types.BlockID, error)
+}
+
+type DBMockHare struct {
+	DB blockDB
+}
+
+func (m *DBMockHare) GetResult(lower types.LayerID, upper types.LayerID) ([]types.BlockID, error) {
+	var results []types.BlockID
+	for id := lower; id <= upper; id++ {
+		blks, err := m.DB.LayerBlockIds(id)
+		if err == nil {
+			results = append(results, blks...)
+		}
+	}
+	return results, nil
+}
+
 func (t *BlockBuilder) createBlock(id types.LayerID, atxID types.AtxId, eligibilityProof types.BlockEligibilityProof,
 	txs []types.AddressableSignedTransaction, atxids []types.AtxId) (*types.Block, error) {
 
@@ -318,7 +337,7 @@ func (t *BlockBuilder) listenForAtx() {
 				// not accepting atxs when not synced
 				continue
 			}
-			t.handleGossipAtx(data)
+			go t.handleGossipAtx(data)
 		}
 	}
 }

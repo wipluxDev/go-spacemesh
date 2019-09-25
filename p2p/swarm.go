@@ -10,6 +10,7 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p/connectionpool"
 	"github.com/spacemeshos/go-spacemesh/p2p/discovery"
 	"github.com/spacemeshos/go-spacemesh/p2p/gossip"
+	"github.com/spacemeshos/go-spacemesh/p2p/keepalive"
 	"github.com/spacemeshos/go-spacemesh/p2p/metrics"
 	"github.com/spacemeshos/go-spacemesh/p2p/net"
 	"github.com/spacemeshos/go-spacemesh/p2p/node"
@@ -17,7 +18,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"github.com/spacemeshos/go-spacemesh/timesync"
 	timeSyncConfig "github.com/spacemeshos/go-spacemesh/timesync/config"
-	"runtime"
 	"strings"
 
 	inet "net"
@@ -34,6 +34,39 @@ type cPool interface {
 	GetConnection(address string, pk p2pcrypto.PublicKey) (net.Connection, error)
 	GetConnectionIfExists(pk p2pcrypto.PublicKey) (net.Connection, error)
 	Shutdown()
+}
+
+
+type PeerState struct {
+	cancels []context.CancelFunc
+}
+
+func (ps *PeerState) Close() {
+	for _, c := range ps.cancels {
+		c()
+	}
+}
+
+func (s *swarm) newPingLoop(key p2pcrypto.PublicKey) context.CancelFunc {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func(ctx context.Context) {
+		tm := time.NewTimer(time.Second * 30)
+		for {
+			select {
+			case <-tm.C:
+				break
+			case <-ctx.Done():
+				return
+			}
+			err := s.heartbeat.Ping(key)
+			if err != nil {
+				s.Disconnect(key)
+				return
+			}
+			tm.Reset(time.Second * 30)
+		}
+	}(ctx)
+	return cancel
 }
 
 type swarm struct {
@@ -63,8 +96,8 @@ type swarm struct {
 
 	network    *net.Net    // (tcp) networking service
 	udpnetwork *net.UDPNet // (udp) networking service
-
 	cPool  cPool // conenction cache
+
 	gossip *gossip.Protocol
 
 	discover  discovery.PeerStore // peer addresses store
@@ -76,8 +109,10 @@ type swarm struct {
 
 	outpeersMutex sync.RWMutex
 	inpeersMutex  sync.RWMutex
-	outpeers      map[p2pcrypto.PublicKey]struct{}
-	inpeers       map[p2pcrypto.PublicKey]struct{}
+	outpeers      map[p2pcrypto.PublicKey]*PeerState
+	inpeers       map[p2pcrypto.PublicKey]*PeerState
+
+	heartbeat *keepalive.Protocol
 
 	morePeersReq      chan struct{}
 	connectingTimeout time.Duration
@@ -140,8 +175,8 @@ func newSwarm(ctx context.Context, config config.Config, newNode bool, persist b
 
 		initial:           make(chan struct{}),
 		morePeersReq:      make(chan struct{}, config.MaxInboundPeers+config.OutboundPeersTarget),
-		inpeers:           make(map[p2pcrypto.PublicKey]struct{}),
-		outpeers:          make(map[p2pcrypto.PublicKey]struct{}),
+		inpeers:           make(map[p2pcrypto.PublicKey]*PeerState),
+		outpeers:          make(map[p2pcrypto.PublicKey]*PeerState),
 		newPeerSub:        make([]chan p2pcrypto.PublicKey, 0, 10),
 		delPeerSub:        make([]chan p2pcrypto.PublicKey, 0, 10),
 		connectingTimeout: ConnectingTimeout,
@@ -161,9 +196,8 @@ func newSwarm(ctx context.Context, config config.Config, newNode bool, persist b
 	mux := NewUDPMux(s.lNode, s.lookupFunc, udpnet, s.lNode.Log)
 	s.udpServer = mux
 
-	if err != nil {
-		return nil, err
-	}
+	s.heartbeat = keepalive.NewHeartbeat(s, time.Second*20,time.Second*20, s.lNode.Log)
+
 	// todo : if discovery on
 	s.discover = discovery.New(l, config.SwarmConfig, s.udpServer) // create table and discovery protocol
 
@@ -361,17 +395,6 @@ func (s *swarm) sendMessageImpl(peerPubKey p2pcrypto.PublicKey, protocol string,
 	dur := time.Since(start)
 	if dur > 10*time.Second {
 		s.lNode.Info("send took more than 10s: msgtype: %v, size: %v, dur: %v, err: %v", protocol, len(final), dur, err)
-		if err != nil {
-			buf := make([]byte, 1024)
-			for {
-				n := runtime.Stack(buf, true)
-				if n < len(buf) {
-					break
-				}
-				buf = make([]byte, 2*len(buf))
-			}
-			s.lNode.Error(string(buf))
-		}
 	}
 
 	return err
@@ -791,9 +814,8 @@ loop:
 				bad++
 				break
 			}
-			s.outpeers[pk] = struct{}{}
+			s.outpeers[pk] = &PeerState{ []context.CancelFunc{s.newPingLoop(pk)} }
 			s.outpeersMutex.Unlock()
-
 			s.discover.Good(cne.n.PublicKey())
 			s.publishNewPeer(cne.n.PublicKey())
 			metrics.OutboundPeers.Add(1)
@@ -825,13 +847,15 @@ func (s *swarm) Disconnect(peer p2pcrypto.PublicKey) {
 	s.inpeersMutex.Unlock()
 
 	s.outpeersMutex.Lock()
-	if _, ok := s.outpeers[peer]; ok {
+	if p, ok := s.outpeers[peer]; ok {
 		delete(s.outpeers, peer)
+		p.Close()
 	} else {
 		s.outpeersMutex.Unlock()
 		return
 	}
 	s.outpeersMutex.Unlock()
+
 	s.publishDelPeer(peer)
 	metrics.OutboundPeers.Add(-1)
 
@@ -854,7 +878,7 @@ func (s *swarm) addIncomingPeer(n p2pcrypto.PublicKey) error {
 	}
 
 	s.inpeersMutex.Lock()
-	s.inpeers[n] = struct{}{}
+	s.inpeers[n] = &PeerState{}
 	s.inpeersMutex.Unlock()
 	if !exist {
 		s.publishNewPeer(n)

@@ -107,12 +107,12 @@ peerLoop:
 		}
 		//wg.Add(1)
 		//go func(pubkey p2pcrypto.PublicKey) {
-			// TODO: replace peer ?
-			err := prot.net.SendMessage(p, nextProt, payload)
-			if err != nil {
-				prot.Warning("Failed sending %v msg %v to %v, reason=%v", nextProt, h, p, err)
-			}
-			//wg.Done()
+		// TODO: replace peer ?
+		err := prot.net.SendMessage(p, nextProt, payload)
+		if err != nil {
+			prot.Warning("Failed sending %v msg %v to %v, reason=%v", nextProt, h, p, err)
+		}
+		//wg.Done()
 		//}(p)
 	}
 	//wg.Wait()
@@ -187,6 +187,7 @@ loop:
 func (prot *Protocol) Relay(sender p2pcrypto.PublicKey, protocol string, msg service.Data) error {
 	return prot.processMessage(sender, protocol, msg)
 }
+
 //
 //func (prot *Protocol) eventLoop(peerConn chan p2pcrypto.PublicKey, peerDisc chan p2pcrypto.PublicKey) {
 //	// TODO: replace with p2p.Peers

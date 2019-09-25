@@ -133,9 +133,9 @@ func TestClose(t *testing.T) {
 	rwcam := NewReadWriteCloseAddresserMock()
 	rPub := p2pcrypto.NewRandomPubkey()
 	conn := newConnection(rwcam, netw, rPub, &networkSessionImpl{}, msgSizeLimit, time.Second, netw.logger)
-	c := make(chan struct{},1)
+	c := make(chan struct{}, 1)
 	netw.SubscribeClosingConnections(func(connection ConnectionWithErr) {
-	c <- struct{}{}
+		c <- struct{}{}
 	})
 
 	rwcam.SetWriteResult(errors.New("x"))
@@ -147,7 +147,6 @@ func TestClose(t *testing.T) {
 	time.Sleep(time.Millisecond * 1000) // block a little bit
 	assert.Equal(t, 1, rwcam.CloseCount())
 	<-c
-
 
 }
 
