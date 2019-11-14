@@ -41,8 +41,8 @@ var EmptyAtxId = &AtxId{}
 
 type ActivationTxHeader struct {
 	NIPSTChallenge
-	id            *AtxId
-	Coinbase      Address
+	id            *AtxId `xdrmaxsize:"32"`
+	Coinbase      Address `xdrmaxsize:"20"`
 	ActiveSetSize uint32
 }
 
@@ -94,14 +94,14 @@ func (challenge *NIPSTChallenge) String() string {
 type InnerActivationTx struct {
 	ActivationTxHeader
 	Nipst      *NIPST
-	View       []BlockID
+	View       []BlockID `xdrmaxsize:"300"`
 	Commitment *PostProof
 	//todo: add sig
 }
 
 type ActivationTx struct {
 	*InnerActivationTx
-	Sig []byte
+	Sig []byte `xdrmaxsize:"64"`
 }
 
 func (signed *ActivationTx) AtxBytes() ([]byte, error) {
@@ -255,7 +255,7 @@ type NIPST struct {
 
 	// nipstChallenge is the challenge for PoET which is
 	// constructed from fields in the activation transaction.
-	NipstChallenge *Hash32
+	NipstChallenge *Hash32 `xdrmaxsize:"32"`
 
 	// postProof is the proof that the prover data
 	// is still stored (or was recomputed).

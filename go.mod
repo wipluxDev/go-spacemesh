@@ -26,6 +26,7 @@ require (
 	github.com/spf13/cobra v0.0.4
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.4.0
+	github.com/stellar/go-xdr v0.0.0-20191025181027-f16312a9bced
 	github.com/stretchr/testify v1.4.0
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	go.opencensus.io v0.22.0 // indirect

@@ -205,6 +205,28 @@ func buildNIPST(r *require.Assertions, postCfg config.Config, nipstChallenge typ
 	return npst
 }
 
+
+func buildNIPSTMock(r *require.Assertions, postCfg config.Config, nipstChallenge types.Hash32, poetDb PoetDbApi) *types.NIPST {
+	postProver, err := NewPostClient(&postCfg, minerID)
+	r.NoError(err)
+	r.NotNil(postProver)
+	defer func() {
+		err := postProver.Reset()
+		r.NoError(err)
+	}()
+
+	commitment, err := postProver.Initialize()
+	r.NoError(err)
+	r.NotNil(commitment)
+
+	nb := newNIPSTBuilder(minerID, postProver, &poetProvingServiceClientMock{},
+		poetDb, database.NewMemDatabase(), log.NewDefault(string(minerID)))
+
+	npst, err := nb.BuildNIPST(&nipstChallenge)
+	r.NoError(err)
+	return npst
+}
+
 func TestNewNIPSTBuilderNotInitialized(t *testing.T) {
 	if testing.Short() {
 		t.Skip()

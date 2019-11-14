@@ -166,7 +166,8 @@ func (n *FaultyNetMock) Broadcast(id string, d []byte) error {
 // ========== Helper functions ==========
 
 func newActivationDb() *ActivationDb {
-	return NewActivationDb(database.NewMemDatabase(), &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB"))
+	db, _ := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+	return NewActivationDb(db, &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB"))
 }
 
 func isSynced(b bool) func() bool {
@@ -477,7 +478,8 @@ func TestBuilder_PublishActivationTx_PosAtxOnSameLayerAsPrevAtx(t *testing.T) {
 func TestBuilder_SignAtx(t *testing.T) {
 	ed := signing.NewEdSigner()
 	nodeId := types.NodeId{ed.PublicKey().String(), []byte("bbbbb")}
-	activationDb := NewActivationDb(database.NewMemDatabase(), &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB1"))
+	db, _ := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+	activationDb := NewActivationDb(db, &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB1"))
 	b := NewBuilder(nodeId, coinbase, ed, activationDb, net, meshProvider, layersPerEpoch, nipstBuilder, postProver, nil, isSynced(true), NewMockDB(), lg.WithName("atxBuilder"))
 
 	prevAtx := types.AtxId(types.HexToHash32("0x111"))
@@ -506,7 +508,8 @@ func TestBuilder_NipstPublishRecovery(t *testing.T) {
 	lg := log.NewDefault(id.Key[:5])
 	db := NewMockDB()
 	sig := &MockSigning{}
-	activationDb := NewActivationDb(database.NewMemDatabase(), &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB1"))
+	rdb, _ := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+	activationDb := NewActivationDb(rdb, &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB1"))
 	b := NewBuilder(id, coinbase, sig, activationDb, &FaultyNetMock{}, layers, layersPerEpoch, nipstBuilder, postProver, nil, func() bool { return true }, db, lg.WithName("atxBuilder"))
 	prevAtx := types.AtxId(types.HexToHash32("0x111"))
 	chlng := types.HexToHash32("0x3333")
@@ -591,8 +594,8 @@ func TestStartPost(t *testing.T) {
 	defer func() {
 		assert.NoError(t, postProver.Reset())
 	}()
-
-	activationDb := NewActivationDb(database.NewMemDatabase(), &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB1"))
+	xdb, _ := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+	activationDb := NewActivationDb(xdb, &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg.WithName("atxDB1"))
 	builder := NewBuilder(id, coinbase, &MockSigning{}, activationDb, &FaultyNetMock{}, layers, layersPerEpoch, nipstBuilder, postProver, nil, func() bool { return true }, db, lg.WithName("atxBuilder"))
 
 	// Attempt to initialize with invalid space.

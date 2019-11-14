@@ -55,3 +55,28 @@ func (bc AtxCache) Get(id types.AtxId) (*types.ActivationTx, bool) {
 	atx := item.(*types.ActivationTx)
 	return atx, true
 }
+
+type AtxHeaderCache struct {
+	*lru.Cache
+}
+
+func NewAtxIdCache(size int) AtxHeaderCache {
+	cache, err := lru.New(size)
+	if err != nil {
+		log.Fatal("could not initialize cache ", err)
+	}
+	return AtxHeaderCache{Cache: cache}
+}
+
+func (bc *AtxHeaderCache) put(id types.AtxId, tx *types.ActivationTxHeader) {
+	bc.Cache.Add(id, tx)
+}
+
+func (bc AtxHeaderCache) Get(id types.AtxId) (*types.ActivationTxHeader, bool) {
+	item, found := bc.Cache.Get(id)
+	if !found {
+		return nil, false
+	}
+	atx := item.(*types.ActivationTxHeader)
+	return atx, true
+}

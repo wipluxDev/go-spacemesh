@@ -21,8 +21,9 @@ type ActivationDb struct {
 	sync.RWMutex
 	//todo: think about whether we need one db or several
 	IdStore
-	atxs            database.Database
+	atxs            *database.LDBDatabase
 	atxCache        AtxCache
+	atxIdCache        AtxHeaderCache
 	meshDb          *mesh.MeshDB
 	LayersPerEpoch  uint16
 	nipstValidator  NipstValidator
@@ -30,8 +31,8 @@ type ActivationDb struct {
 	processAtxMutex sync.Mutex
 }
 
-func NewActivationDb(dbstore database.Database, idstore IdStore, meshDb *mesh.MeshDB, layersPerEpoch uint16, nipstValidator NipstValidator, log log.Log) *ActivationDb {
-	return &ActivationDb{atxs: dbstore, atxCache: NewAtxCache(20), meshDb: meshDb, nipstValidator: nipstValidator, LayersPerEpoch: layersPerEpoch, IdStore: idstore, log: log}
+func NewActivationDb(dbstore *database.LDBDatabase, idstore IdStore, meshDb *mesh.MeshDB, layersPerEpoch uint16, nipstValidator NipstValidator, log log.Log) *ActivationDb {
+	return &ActivationDb{atxs: dbstore, atxCache: NewAtxCache(200), atxIdCache: NewAtxIdCache(200), meshDb: meshDb, nipstValidator: nipstValidator, LayersPerEpoch: layersPerEpoch, IdStore: idstore, log: log}
 }
 
 func (db *ActivationDb) ProcessAtxs(atxs []*types.ActivationTx) error {
@@ -85,6 +86,10 @@ func (db *ActivationDb) ProcessAtx(batch database.Batch, atx *types.ActivationTx
 	if err != nil {
 		db.log.With().Error("cannot store node identity", log.String("atx_node_id", atx.NodeId.ShortString()), log.AtxId(atx.ShortString()), log.Err(err))
 	}
+
+	db.atxIdCache.put(atx.Id(), &atx.ActivationTxHeader)
+	db.atxCache.put(atx.Id(), atx)
+
 	return nil
 }
 
@@ -97,11 +102,10 @@ func (db *ActivationDb) createTraversalActiveSetCounterFunc(countedAtxs map[stri
 			return false, nil
 		}
 
-		// count unique ATXs
 		for _, id := range b.AtxIds {
 			atx, err := db.GetAtx(id)
 			if err != nil {
-				log.Panic("error fetching atx %v from database -- inconsistent state", id.ShortString()) // TODO: handle inconsistent state
+				log.Panic("error fetching atx %v from database -- inconsistent state %v", id.ShortString(), err) // TODO: handle inconsistent state
 				return false, fmt.Errorf("error fetching atx %v from database -- inconsistent state", id.ShortString())
 			}
 
@@ -492,10 +496,21 @@ func (db *ActivationDb) getAtxUnlocked(id types.AtxId) (*types.ActivationTx, err
 // GetAtx returns the atx by the given id. this function is thread safe and will return error if the id is not found in the
 // atx db
 func (db *ActivationDb) GetAtx(id types.AtxId) (*types.ActivationTxHeader, error) {
+	if id == *types.EmptyAtxId {
+		return nil, errors.New("trying to fetch empty atx id")
+	}
+
+	if atx, gotIt := db.atxIdCache.Get(id); gotIt {
+		return atx, nil
+	}
+
 	atx, err := db.GetFullAtx(id)
 	if err != nil {
 		return nil, err
 	}
+
+	db.atxIdCache.Add(id, atx.ActivationTxHeader)
+
 	return &atx.ActivationTxHeader, nil
 }
 

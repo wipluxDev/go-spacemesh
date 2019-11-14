@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/spacemeshos/go-spacemesh/amcl"
+	"github.com/spacemeshos/go-spacemesh/amcl/BLS381"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/database"
 	"github.com/spacemeshos/go-spacemesh/log"
@@ -13,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"math/big"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"sort"
 	"testing"
@@ -33,6 +37,19 @@ func createLayerWithAtx2(t require.TestingT, msh *mesh.Mesh, id types.LayerID, n
 	}
 	return
 }
+
+type poetDBMock struct {
+	SubscribeToProofRefFunc func(poetId []byte, roundId string) chan []byte
+	GetMembershipMapFunc func(proofRef []byte) (map[types.Hash32]bool, error)
+}
+
+func (p *poetDBMock) SubscribeToProofRef(poetId []byte, roundId string) chan []byte {
+	return p.SubscribeToProofRefFunc(poetId, roundId)
+}
+func (p *poetDBMock) GetMembershipMap(proofRef []byte) (map[types.Hash32]bool, error) {
+	return p.GetMembershipMapFunc(proofRef)
+}
+
 
 type MeshValidatorMock struct{}
 
@@ -132,7 +149,9 @@ func getAtxDb(id string) (*ActivationDb, *mesh.Mesh, database.Database) {
 	lg := log.NewDefault(id)
 	memesh := mesh.NewMemMeshDB(lg.WithName("meshDB"))
 	atxStore := database.NewMemDatabase()
-	atxdb := NewActivationDb(atxStore, NewIdentityStore(database.NewMemDatabase()), memesh, layersPerEpochBig, &ValidatorMock{}, lg.WithName("atxDB"))
+	db, _ := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+
+	atxdb := NewActivationDb(db, NewIdentityStore(database.NewMemDatabase()), memesh, layersPerEpochBig, &ValidatorMock{}, lg.WithName("atxDB"))
 	layers := mesh.NewMesh(memesh, atxdb, ConfigTst(), &MeshValidatorMock{}, &MockTxMemPool{}, &MockAtxMemPool{}, &MockState{}, lg.WithName("mesh"))
 	return atxdb, layers, atxStore
 }
@@ -226,6 +245,129 @@ func TestATX_ActiveSetForLayerView(t *testing.T) {
 	_, ok := actives[id2.Key]
 	assert.True(t, ok)
 }
+
+//
+func stressAtxDB(id string, lyrsperepoch int) (*ActivationDb, *mesh.Mesh, database.Database) {
+	lg := log.NewDefault(id)
+	memesh := mesh.NewMemMeshDB(lg.WithName("meshDB_stress"))
+	atxStore := database.NewMemDatabase()
+	db, _ := database.NewLDBDatabase("ftest", 256, 0, log.NewDefault("LOG"))
+	atxdb := NewActivationDb(db, NewIdentityStore(database.NewMemDatabase()), memesh, uint16(lyrsperepoch), &ValidatorMock{}, lg.WithName("atxDB"))
+	layers := mesh.NewMesh(memesh, atxdb, ConfigTst(), &MeshValidatorMock{}, &MockTxMemPool{}, &MockAtxMemPool{}, &MockState{}, lg.WithName("mesh"))
+	return atxdb, layers, atxStore
+}
+
+//
+//
+//func TestATX_CalcActiveSetBench(t *testing.T) {
+//
+//	const ATXS = 300
+//	const LayerSize = 200
+//	const LayersPerEpoch = 5
+//
+//	rand.Seed(1234573298579)
+//	atxdb, layers, _ := stressAtxDB(t.Name())
+//
+//	blocksMap := make(map[types.BlockID]struct{})
+//
+//
+//	type TestNodeId struct {
+//		types.NodeId
+//		bls *BLS381.BlsSigner
+//	}
+//
+//
+//	nodes := make([]TestNodeId, ATXS)
+//	atxs := make(map[string][]*types.ActivationTx, ATXS)
+//	layerz := make(map[types.LayerID][]types.Block, LayerSize)
+//
+//	rng := amcl.NewRAND()
+//
+//	for i := 0; i < ATXS; i++ {
+//		edSgn := signing.NewEdSigner()
+//		//rng.Seed(len(pub), edSgn.Sign(pub)) // assuming ed.private is random, the sig can be used as seed
+//		vrfPriv, vrfPub := BLS381.GenKeyPair(rng)
+//		vrfSigner := BLS381.NewBlsSigner(vrfPriv)
+//		id := TestNodeId{types.NodeId{Key: edSgn.PublicKey().String(), VRFPublicKey: vrfPub}, vrfSigner}
+//		nodes[i] = id
+//
+//		for i := 0; i < LayerSize; i++ {
+//			if i == 0 {
+//				f := types.NewActivationTx(id.NodeId, types.HexToAddress(rndStr()), uint64(i), *types.EmptyAtxId, 1, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{})
+//				atxs[id.Key] = make([]*types.ActivationTx, LayerSize/LayersPerEpoch)
+//				atxs[id.Key][0] = f
+//
+//
+//
+//				continue
+//			}
+//
+//			f := types.NewActivationTx(id.NodeId, types.HexToAddress(rndStr()), uint64(i+1), atxs[id.Key][i-1].Id(), types.LayerID(i+1), 0, atxs[id.Key][i-1].Id(), ATXS, []types.BlockID{}, &types.NIPST{})
+//			atxs[id.Key][i] = f
+//
+//		}
+//	}
+//
+//	for i := 1; i < LayerSize; i++ {
+//		for _, nd := range nodes {
+//			f := types.NewActivationTx(nd.NodeId, types.HexToAddress(rndStr()), 0, *types.EmptyAtxId, 1, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{})
+//		}
+//	}
+//
+//	//layers.AtxDB = &AtxDbMock{make(map[types.AtxId]*types.ActivationTx), make(map[types.AtxId]*types.NIPST)}
+//	id1 := types.NodeId{Key: rndStr(), VRFPublicKey: []byte("anton")}
+//	id2 := types.NodeId{Key: rndStr(), VRFPublicKey: []byte("anton")}
+//	id3 := types.NodeId{Key: rndStr(), VRFPublicKey: []byte("anton")}
+//	id4 := types.NodeId{Key: rndStr(), VRFPublicKey: []byte("anton")}
+//	coinbase1 := types.HexToAddress("aaaa")
+//	coinbase2 := types.HexToAddress("bbbb")
+//	coinbase3 := types.HexToAddress("cccc")
+//	coinbase4 := types.HexToAddress("cccc")
+//	atxs := []*types.ActivationTx{
+//		types.NewActivationTx(id1, coinbase1, 0, *types.EmptyAtxId, 1, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{}),
+//		types.NewActivationTx(id1, coinbase1, 0, *types.EmptyAtxId, 2, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{}),
+//		types.NewActivationTx(id1, coinbase1, 0, *types.EmptyAtxId, 3, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{}),
+//		types.NewActivationTx(id2, coinbase2, 0, *types.EmptyAtxId, 2, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{}),
+//		types.NewActivationTx(id4, coinbase4, 0, *types.EmptyAtxId, 2, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{}),
+//		types.NewActivationTx(id3, coinbase3, 0, *types.EmptyAtxId, 11, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{}),
+//	}
+//
+//	poetRef := []byte{0xba, 0xb0}
+//	for _, atx := range atxs {
+//		hash, err := atx.NIPSTChallenge.Hash()
+//		assert.NoError(t, err)
+//		atx.Nipst = NewNIPSTWithChallenge(hash, poetRef)
+//		//layers.AtxDB.(*AtxDbMock).AddAtx(atx.Id(), atx)
+//	}
+//	id := atxs[4].Id()
+//	fmt.Println("ID4 ", id.ShortString())
+//	blocks := createLayerWithAtx(t, layers, 1, 6, atxs, []types.BlockID{}, []types.BlockID{})
+//	before := blocks[:4]
+//	four := blocks[4:5]
+//	after := blocks[5:]
+//	for i := 2; i <= 10; i++ {
+//		before = createLayerWithAtx(t, layers, types.LayerID(i), 1, []*types.ActivationTx{}, before, before)
+//		four = createLayerWithAtx(t, layers, types.LayerID(i), 1, []*types.ActivationTx{}, four, four)
+//		after = createLayerWithAtx(t, layers, types.LayerID(i), 1, []*types.ActivationTx{}, after, after)
+//	}
+//	for _, x := range before {
+//		blocksMap[x] = struct{}{}
+//	}
+//
+//	for _, x := range after {
+//		blocksMap[x] = struct{}{}
+//	}
+//
+//	layer := types.LayerID(10)
+//	layersPerEpoch := uint16(6)
+//	atxdb.LayersPerEpoch = layersPerEpoch
+//	epoch := layer.GetEpoch(layersPerEpoch)
+//	actives, err := atxdb.CalcActiveSetSize(epoch, blocksMap)
+//	assert.NoError(t, err)
+//	assert.Equal(t, 1, int(len(actives)))
+//	_, ok := actives[id2.Key]
+//	assert.True(t, ok)
+//}
 
 func TestMesh_ActiveSetForLayerView2(t *testing.T) {
 	atxdb, _, _ := getAtxDb(t.Name())
@@ -832,6 +974,227 @@ func BenchmarkActivationDb_SyntacticallyValidateAtx(b *testing.B) {
 	r.NoError(err)
 }
 
+
+
+func BenchmarkActivationDb_CalcAcrtiveSet(b *testing.B) {
+
+	go func () {
+		http.ListenAndServe(":6060", nil)
+	}()
+
+	r := require.New(b)
+	nopLogger := log.NewDefault("").WithOptions(log.Nop)
+	const (
+		LayersPerEpoch= 5
+		activesetSize= 300
+		blocksPerLayer= 200
+		numberOfLayers= 10
+	)
+
+	atxdb, layers, _ := stressAtxDB("t8", LayersPerEpoch)
+	atxdb.log = nopLogger
+	layers.Log = nopLogger
+
+	type TestNodeId struct {
+		types.NodeId
+		edSgn *signing.EdSigner
+		bls   *BLS381.BlsSigner
+		atxs map[types.EpochId]*types.ActivationTx
+	}
+
+	nodes := make(map[string]TestNodeId, activesetSize)
+
+	rng := amcl.NewRAND()
+	coinbase := types.HexToAddress("c012ba5e")
+
+	createAtx := func(node TestNodeId, seq uint64, idx types.LayerID, prevAtx *types.AtxId, activeSetSize uint32)  *types.ActivationTx {
+		 return types.NewActivationTx(node.NodeId, coinbase, seq, *prevAtx, idx,
+			0, *prevAtx, activeSetSize, []types.BlockID{}, &types.NIPST{})
+	}
+
+	proveAtx := func (layerid types.LayerID, atx *types.ActivationTx) *types.ActivationTx {
+
+		genmap := make(map[types.Hash32]bool)
+
+		ch := newChallenge(atx.NodeId, atx.Sequence, atx.ActivationTxHeader.PrevATXId, atx.ActivationTxHeader.PrevATXId, layerid)
+		atx.NIPSTChallenge = ch
+		hash, err := ch.Hash()
+		require.NoError(b, err)
+		genmap[*hash] = true
+
+		pmock := &poetDBMock{}
+
+		poetRef := []byte{0, 1}
+		pmock.GetMembershipMapFunc = func(proofRef []byte) (bools map[types.Hash32]bool, e error) {
+			return genmap, nil
+
+		}
+		pmock.SubscribeToProofRefFunc = func(poetId []byte, roundId string) chan []byte {
+			ch := make(chan []byte, 1)
+			ch <- poetRef
+			return ch
+		}
+
+		r.NoError(err)
+		post := buildNIPSTMock(r, postCfg, *hash, pmock)
+		if layerid.GetEpoch(atxdb.LayersPerEpoch) == 0 {
+			atx.Commitment = post.PostProof
+			atx.CommitmentMerkleRoot = post.PostProof.MerkleRoot
+		} else {
+			atx.Nipst = post
+		}
+		satx, err := types.SignAtx(nodes[atx.NodeId.String()].edSgn, atx)
+
+		//r.NoError(atxdb.StoreAtx(layerid.GetEpoch(atxdb.LayersPerEpoch), satx))
+
+		return satx
+	}
+
+	for i := 0; i < activesetSize; i++ {
+		edSgn := signing.NewEdSigner()
+		//rng.Seed(len(pub), edSgn.Sign(pub)) // assuming ed.private is random, the sig can be used as seed
+		vrfPriv, vrfPub := BLS381.GenKeyPair(rng)
+		vrfSigner := BLS381.NewBlsSigner(vrfPriv)
+		id := TestNodeId{types.NodeId{Key: edSgn.PublicKey().String(), VRFPublicKey: vrfPub}, edSgn, vrfSigner, make(map[types.EpochId]*types.ActivationTx)}
+
+		nodes[id.NodeId.String()] = id
+		genesisAtx := createAtx(id, 0, 1, types.EmptyAtxId, 0)
+		genesisProven := proveAtx(1, genesisAtx)
+		nodes[id.NodeId.String()].atxs[0] = genesisProven
+		r.NoError(atxdb.StoreNodeIdentity(id.NodeId))
+		//blocks := createLayerWithAtx2(b, layers, 0, blocksPerLayer, atxs, []types.BlockID{}, []types.BlockID{420})
+		//for i := 1; i < numberOfLayers; i++ {
+		//	blocks = createLayerWithAtx2(b, layers, types.LayerID(i), blocksPerLayer, []*types.ActivationTx{}, blocks, blocks)
+		//}
+
+		//
+		//for i := 0; i < LayerSize/LayersPerEpoch; i++ {
+		//	//if i == 0 {
+		//	//	f := types.NewActivationTx(id.NodeId, types.HexToAddress(rndStr()), uint64(i), *types.EmptyAtxId, 1, 0, *types.EmptyAtxId, 0, []types.BlockID{}, &types.NIPST{})
+		//	//	atxs[id.Key] = make([]*types.ActivationTx, LayerSize/LayersPerEpoch)
+		//	//	atxs[id.Key][0] = f
+		//	//
+		//	//
+		//	//
+		//	//	continue
+		//	//}
+		//	//
+		//	//f := types.NewActivationTx(id.NodeId, types.HexToAddress(rndStr()), uint64(i+1), atxs[id.Key][i-1].Id(), types.LayerID(i+1), 0, atxs[id.Key][i-1].Id(), ATXS, []types.BlockID{}, &types.NIPST{})
+		//	//atxs[id.Key][i] = f
+		//
+		//}
+	}
+
+	allAtxs := func(id types.EpochId) []*types.ActivationTx {
+		var atxs []*types.ActivationTx
+		for _, nd := range nodes {
+			atxs = append(atxs, nd.atxs[id])
+		}
+		return atxs
+	}
+
+
+
+	blocks := createLayerWithAtx2(b, layers, 0, blocksPerLayer, nil, []types.BlockID{}, []types.BlockID{420})
+	blocks = createLayerWithAtx2(b, layers, 1, blocksPerLayer, allAtxs(0), blocks, blocks)
+	blocks = createLayerWithAtx2(b, layers, 2, blocksPerLayer, nil, blocks, blocks)
+	blocks = createLayerWithAtx2(b, layers, 3, blocksPerLayer, nil, blocks, blocks)
+	blocks = createLayerWithAtx2(b, layers, 4, blocksPerLayer, nil, blocks, blocks)
+	blocks = createLayerWithAtx2(b, layers, 5, blocksPerLayer, nil, blocks, blocks)
+
+	for i := 6; i < numberOfLayers; i++ {
+		atxs:= []*types.ActivationTx{}
+		if (i-1) % LayersPerEpoch == 0 {
+			epch := types.LayerID(i).GetEpoch(atxdb.LayersPerEpoch)
+			fmt.Println("Creating atx for epoch ", i, epch, atxdb.LayersPerEpoch)
+			for _, node := range nodes {
+				prev := node.atxs[epch-1].Id()
+				atx := createAtx(node, uint64(len(node.atxs)), types.LayerID(i), &prev, uint32(len(nodes)))
+				atx.View = blocks
+				proven := proveAtx(types.LayerID(i), atx)
+				node.atxs[types.LayerID(i).GetEpoch(atxdb.LayersPerEpoch)] = proven
+				atxs = append(atxs, proven)
+			}
+
+			//iter := atxdb.atxs.NewIterator()
+			//seeked := iter.Seek(atxs[0].Id().Bytes())
+			//if seeked {
+			//	v := iter.Value()
+			//
+			//	panic("Cool")
+			//}
+
+			for _, atx := range atxs {
+				fmt.Println("Proving atx for epoch ", epch)
+				mp := map[types.BlockID]struct{}{}
+				for _, blk := range atx.View {
+					mp[blk] = struct{}{}
+				}
+				tim := time.Now()
+				countedAtxs, err := atxdb.CalcActiveSetSize(atx.PubLayerIdx.GetEpoch(atxdb.LayersPerEpoch), mp)
+				fmt.Printf("CalcActiveSetSize took %v with %v activeset size and %v blocks in view counted %v atx. \r\n ", time.Since(tim), activesetSize, len(mp), len(countedAtxs))
+				r.NoError(err)
+				r.Equal(len(countedAtxs), activesetSize)
+			}
+			//err := atxdb.SyntacticallyValidateAtx(atx)
+			//r.NoError(err)
+
+		}
+		blocks = createLayerWithAtx2(b, layers, types.LayerID(i), blocksPerLayer, atxs, blocks, blocks)
+	}
+	for _, nd := range nodes {
+		for i, atx := range nd.atxs {
+			if i != 0 {
+				i := i
+				atx := atx
+				fmt.Println("Proving atx for epoch ", i)
+				mp := map[types.BlockID]struct{}{}
+				for _, blk := range atx.View {
+					mp[blk] = struct{}{}
+				}
+				tim := time.Now()
+				countedAtxs, err := atxdb.CalcActiveSetSize(atx.PubLayerIdx.GetEpoch(atxdb.LayersPerEpoch), mp)
+				fmt.Printf("CalcActiveSetSize took %v with %v activeset size and %v blocks in view counted %v atx. \r\n ", time.Since(tim), activesetSize, len(mp), len(countedAtxs))
+				r.NoError(err)
+				r.Equal(len(countedAtxs), activesetSize)
+			}
+			//err := atxdb.SyntacticallyValidateAtx(atx)
+			//r.NoError(err)
+		}
+	}
+
+	//
+	//idx1 := types.NodeId{Key: uuid.New().String(), VRFPublicKey: []byte("anton")}
+	//challenge := newChallenge(idx1, 0, *types.EmptyAtxId, *types.EmptyAtxId, numberOfLayers+1)
+	//hash, err := challenge.Hash()
+	//r.NoError(err)
+	//prevAtx := newAtx(challenge, activesetSize, blocks, NewNIPSTWithChallenge(hash, poetRef))
+	//
+	//atx := types.NewActivationTx(idx1, coinbase, 1, prevAtx.Id(), numberOfLayers+1+layersPerEpochBig, 0, prevAtx.Id(), activesetSize, blocks, &types.NIPST{})
+	//hash, err = atx.NIPSTChallenge.Hash()
+	//r.NoError(err)
+	//atx.Nipst = NewNIPSTWithChallenge(hash, poetRef)
+	//atx, err = types.SignAtx(edSgn, firstAtx)
+	//
+	//err = atxdb.StoreAtx(1, prevAtx)
+	//r.NoError(err)
+	////
+	//start := time.Now()
+	//err = atxdb.SyntacticallyValidateAtx(atx)
+	//fmt.Printf("\nSyntactic validation took %v\n", time.Since(start))
+	//r.NoError(err)
+	//
+	//start = time.Now()
+	//err = atxdb.SyntacticallyValidateAtx(atx)
+	//fmt.Printf("\nSecond syntactic validation took %v\n", time.Since(start))
+	//r.NoError(err)
+	//
+	//start = time.Now()
+	//err = atxdb.ContextuallyValidateAtx(&atx.ActivationTxHeader)
+	//fmt.Printf("\nContextual validation took %v\n\n", time.Since(start))
+	//r.NoError(err)
+}
+
 func BenchmarkNewActivationDb(b *testing.B) {
 	r := require.New(b)
 
@@ -937,7 +1300,9 @@ func TestActivationDb_ValidateSignedAtx(t *testing.T) {
 	lg := log.NewDefault("sigValidation")
 	idStore := NewIdentityStore(database.NewMemDatabase())
 	memesh := mesh.NewMemMeshDB(lg.WithName("meshDB"))
-	atxdb := NewActivationDb(database.NewMemDatabase(), idStore, memesh, layersPerEpochBig, &ValidatorMock{}, lg.WithName("atxDB"))
+	db, err := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+	r.NoError( err)
+	atxdb := NewActivationDb(db, idStore, memesh, layersPerEpochBig, &ValidatorMock{}, lg.WithName("atxDB"))
 
 	ed := signing.NewEdSigner()
 	nodeId := types.NodeId{ed.PublicKey().String(), []byte("bbbbb")}
@@ -945,7 +1310,7 @@ func TestActivationDb_ValidateSignedAtx(t *testing.T) {
 	// test happy flow of first ATX
 	emptyAtx := types.EmptyAtxId
 	atx := types.NewActivationTx(nodeId, coinbase, 1, *emptyAtx, 15, 1, *emptyAtx, 5, []types.BlockID{1, 2, 3}, npst)
-	_, err := createAndValidateSignedATX(r, atxdb, ed, atx)
+	_, err = createAndValidateSignedATX(r, atxdb, ed, atx)
 	r.NoError(err)
 
 	// test negative flow no atx found in idstore
