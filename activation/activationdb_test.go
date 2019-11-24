@@ -1301,6 +1301,7 @@ func TestActivationDb_ValidateSignedAtx(t *testing.T) {
 	idStore := NewIdentityStore(database.NewMemDatabase())
 	memesh := mesh.NewMemMeshDB(lg.WithName("meshDB"))
 	db, err := database.NewLDBDatabase("ftest", 0, 0, log.NewDefault("LOG"))
+	defer os.RemoveAll("ftest")
 	r.NoError( err)
 	atxdb := NewActivationDb(db, idStore, memesh, layersPerEpochBig, &ValidatorMock{}, lg.WithName("atxDB"))
 
