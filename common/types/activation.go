@@ -14,7 +14,7 @@ type EpochId uint64
 func (l EpochId) ToBytes() []byte { return util.Uint64ToBytes(uint64(l)) }
 
 func (l EpochId) IsGenesis() bool {
-	return l < 2
+	return true
 }
 
 func (l EpochId) FirstLayer(layersPerEpoch uint16) LayerID {

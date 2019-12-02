@@ -590,7 +590,7 @@ func (db *ActivationDb) GetFullAtx(id types.AtxId) (*types.ActivationTx, error) 
 // it returns error if no associated atx is found in db
 func (db *ActivationDb) IsIdentityActive(edId string, layer types.LayerID) (*types.NodeId, bool, types.AtxId, error) {
 	// TODO: genesis flow should decide what we want to do here
-	if layer.GetEpoch(db.LayersPerEpoch) == 0 {
+	if true {
 		return nil, true, *types.EmptyAtxId, nil
 	}
 
