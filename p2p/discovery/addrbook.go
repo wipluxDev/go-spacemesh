@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"bytes"
 	"encoding/binary"
 	"github.com/spacemeshos/go-spacemesh/crypto"
 	"github.com/spacemeshos/go-spacemesh/filesystem"
@@ -79,8 +80,9 @@ const (
 // addrBook provides a concurrency safe address manager for caching potential
 // peers on the bitcoin network.
 type addrBook struct {
-	logger log.Log
-	mtx    sync.Mutex
+	logger   log.Log
+	mtx      sync.Mutex
+	localmtx sync.RWMutex
 
 	rand *rand.Rand
 	key  [32]byte
@@ -91,7 +93,7 @@ type addrBook struct {
 	addrTried [triedBucketCount]map[node.ID]*KnownAddress
 
 	//todo: lock local for updates
-	localAddress *node.NodeInfo
+	localAddresses []*node.NodeInfo
 
 	nTried int
 	nNew   int
@@ -103,6 +105,27 @@ type addrBook struct {
 	quit chan struct{}
 }
 
+func (a *addrBook) AddLocalAddress(info *node.NodeInfo) {
+	a.localmtx.Lock()
+	a.localAddresses = append(a.localAddresses, info)
+	a.localmtx.Unlock()
+}
+
+func (a *addrBook) IsLocalAddress(info *node.NodeInfo) bool {
+	a.localmtx.RLock()
+	defer a.localmtx.RUnlock()
+	for _, local := range a.localAddresses {
+		if info.ID == local.ID {
+			return true
+		}
+
+		if bytes.Equal(info.IP, local.IP) && info.ProtocolPort == info.ProtocolPort {
+			return true
+		}
+	}
+	return false
+}
+
 // updateAddress is a helper function to either update an address already known
 // to the address manager, or to add the address if not already known.
 func (a *addrBook) updateAddress(netAddr, srcAddr *node.NodeInfo) {
@@ -111,6 +134,10 @@ func (a *addrBook) updateAddress(netAddr, srcAddr *node.NodeInfo) {
 	//also includes invalid and local addresses.
 	if !IsRoutable(netAddr.IP) && IsRoutable(srcAddr.IP) {
 		// XXX: this makes tests work with unroutable addresses(loopback)
+		return
+	}
+
+	if a.IsLocalAddress(netAddr) {
 		return
 	}
 
@@ -644,10 +671,9 @@ func (a *addrBook) reset() {
 func NewAddrBook(localAddress *node.NodeInfo, config config.SwarmConfig, logger log.Log) *addrBook {
 	//TODO use config for const params.
 	am := addrBook{
-		logger:       logger,
-		localAddress: localAddress,
-		rand:         rand.New(rand.NewSource(time.Now().UnixNano())),
-		quit:         make(chan struct{}),
+		logger: logger,
+		rand:   rand.New(rand.NewSource(time.Now().UnixNano())),
+		quit:   make(chan struct{}),
 	}
 	am.reset()
 
