@@ -78,10 +78,10 @@ func NewPersistentMeshDB(path string, blockCacheSize int, log log.Log) (*MeshDB,
 
 func (m *MeshDB) PersistentData() bool {
 	if _, err := m.general.Get(LATEST); err == nil {
-		m.Info("found data to recover on disc")
+		m.Info("found data to recover from disk")
 		return true
 	}
-	m.Info("did not find data to recover on disc")
+	m.Info("did not find any data to recover from disk")
 	return false
 }
 
