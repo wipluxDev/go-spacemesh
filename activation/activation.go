@@ -256,6 +256,7 @@ func (b *Builder) StartPost(rewardAddress types.Address, dataDir string, space u
 		if initialized {
 			// If initialized, run the execution phase with zero-challenge,
 			// to create the initial proof (the commitment).
+			b.log.Info("PoST is already initialized: running execution phase")
 			b.commitment, err = b.postProver.Execute(shared.ZeroChallenge)
 			if err != nil {
 				b.log.Error("PoST execution failed: %v", err)
@@ -265,6 +266,7 @@ func (b *Builder) StartPost(rewardAddress types.Address, dataDir string, space u
 		} else {
 			// If not initialized, run the initialization phase.
 			// This would create the initial proof (the commitment) as well.
+			b.log.Info("PoST not yet initialized: running initialization phase")
 			b.commitment, err = b.postProver.Initialize()
 			if err != nil {
 				b.log.Error("PoST initialization failed: %v", err)
