@@ -252,12 +252,9 @@ func newBuilder(activationDb ATXDBProvider) *Builder {
 	return b
 }
 
-func newEmptyBuilder(name string, id types.NodeId, coinbase types.Address, postProver *PostClient, lg log.Log) *Builder {
-	layersPerEpoch := uint16(10)
-	layers := &MeshProviderMock{}
-	nipstBuilder := &NipstBuilderMock{}
-	activationDb := NewActivationDb(database.NewMemDatabase(), &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg)
+func newEmptyBuilder(name string, id types.NodeId, coinbase types.Address, activationDb ATXDBProvider, layers *MeshProviderMock, postProver *PostClient, lg log.Log) *Builder {
 	db := NewMockDB()
+	nipstBuilder := &NipstBuilderMock{}
 	return NewBuilder(id, coinbase, &MockSigning{}, activationDb, &FaultyNetMock{}, layers, layersPerEpoch, nipstBuilder, postProver, layerClock, &mockSyncer{}, db, lg.WithName(name))
 }
 
@@ -425,41 +422,6 @@ func TestBuilder_PublishActivationTx_RebuildNipstWhenTargetEpochPassed(t *testin
 	r.NoError(err)
 	r.True(published)
 	r.True(builtNipst)
-}
-
-func TestBuilder_PublishATX_ThenReinitBuilder(t *testing.T) {
-	r := require.New(t)
-
-	// setup
-	activationDb := newActivationDb()
-	b := newBuilder(activationDb)
-	setActivesetSizeInCache(t, defaultActiveSetSize)
-	defer activesetCache.Purge()
-
-	challenge := newChallenge(otherNodeId /*👀*/, 1, prevAtxId, prevAtxId, postGenesisEpochLayer)
-	posAtx := newAtx(challenge, 5, defaultView, npst)
-	storeAtx(r, activationDb, posAtx, log.NewDefault("storeAtx"))
-
-	// create and publish ATX
-	published, _, err := publishAtx(b, postGenesisEpochLayer+1, postGenesisEpoch, layersPerEpoch)
-	r.NoError(err)
-	r.True(published)
-	assertLastAtx(r, posAtx.ActivationTxHeader, nil, layersPerEpoch)
-
-	// reinit builder
-	id := types.NodeId{"aaaaaa", []byte("bbbbb")}
-	coinbase := types.HexToAddress("0xaaa")
-	postProver, err := NewPostClient(&postCfg, util.Hex2Bytes(id.Key))
-	assert.NoError(t, err)
-	assert.NotNil(t, postProver)
-	b = newEmptyBuilder("atxBuilder", id, coinbase, postProver, lg)
-	assert.Nil(t, b.commitment)
-	drive := "/tmp/anton"
-	err = b.StartPost(coinbase, drive, 1024)
-	assert.NoError(t, err)
-	time.Sleep(100 * time.Millisecond) // Introducing a small delay since the procedure is async.
-	// Make sure *new* PoST not generated
-	assert.NotNil(t, b.commitment)
 }
 
 func TestBuilder_PublishActivationTx_NoPrevATX(t *testing.T) {
@@ -665,7 +627,6 @@ func TestBuilder_NipstPublishRecovery(t *testing.T) {
 	net := &NetMock{}
 	layers := &MeshProviderMock{}
 	nipstBuilder := &NipstBuilderMock{}
-	layersPerEpoch := uint16(10)
 	lg := log.NewDefault(id.Key[:5])
 	db := NewMockDB()
 	sig := &MockSigning{}
@@ -735,10 +696,12 @@ func TestBuilder_NipstPublishRecovery(t *testing.T) {
 func TestStartPost(t *testing.T) {
 	id := types.NodeId{"aaaaaa", []byte("bbbbb")}
 	coinbase := types.HexToAddress("0xaaa")
+	activationDb := NewActivationDb(database.NewMemDatabase(), &MockIdStore{}, mesh.NewMemMeshDB(lg.WithName("meshDB")), layersPerEpoch, &ValidatorMock{}, lg)
 	lg := log.NewDefault(id.Key[:5])
 
 	drive := "/tmp/anton"
 	coinbase2 := types.HexToAddress("0xabb")
+	layers := &MeshProviderMock{}
 
 	postCfg := *config.DefaultConfig()
 	postCfg.Difficulty = 5
@@ -753,9 +716,7 @@ func TestStartPost(t *testing.T) {
 		assert.NoError(t, postProver.Reset())
 	}()
 
-	builder := newEmptyBuilder("atxBuilder", id, coinbase, postProver, lg)
-
-	// builder := NewBuilder(id, coinbase, &MockSigning{}, activationDb, &FaultyNetMock{}, layers, layersPerEpoch, nipstBuilder, postProver, layerClock, &mockSyncer{}, db, lg.WithName("atxBuilder"))
+	builder := newEmptyBuilder("atxBuilder1", id, coinbase, activationDb, layers, postProver, lg)
 
 	// Attempt to initialize with invalid space.
 	// This test verifies that the params are being set in the post client.
@@ -771,9 +732,8 @@ func TestStartPost(t *testing.T) {
 	assert.EqualError(t, err, "already started")
 	assert.Nil(t, builder.commitment)
 
-	// Reinitialize.
-	builder = newEmptyBuilder("atxBuilder2", id, coinbase, postProver, lg)
-	// builder = NewBuilder(id, coinbase, &MockSigning{}, activationDb, &FaultyNetMock{}, layers, layersPerEpoch, nipstBuilder, postProver, layerClock, &mockSyncer{}, db, lg.WithName("atxBuilder2"))
+	// Instantiate a new builder
+	builder = newEmptyBuilder("atxBuilder2", id, coinbase, activationDb, layers, postProver, lg)
 	assert.Nil(t, builder.commitment)
 	err = builder.StartPost(coinbase2, drive, 1024)
 	assert.NoError(t, err)
@@ -781,16 +741,38 @@ func TestStartPost(t *testing.T) {
 	assert.NotNil(t, builder.commitment)
 	assert.Equal(t, postProver.Cfg().SpacePerUnit, uint64(1024))
 
+	// Publish the ATX in correct epoch
+	layerClock.currentLayer = types.EpochId(1).FirstLayer(layersPerEpoch) + 3
+	err = builder.PublishActivationTx()
+	assert.EqualError(t, err, "target epoch has passed")
+
+	builder = newEmptyBuilder("atxBuilder2a", id, coinbase, activationDb, layers, postProver, lg)
+	err = builder.loadChallenge()
+	assert.NoError(t, err)
+	layers.latestLayer = 22
+	builder.commitment = commitment
+	assert.NotNil(t, builder.commitment)
+	err = builder.PublishActivationTx()
+	assert.NoError(t, err)
+
 	// Attempt to initialize again.
 	err = builder.StartPost(coinbase2, drive, 1024)
 	assert.EqualError(t, err, "already initialized")
 	assert.NotNil(t, builder.commitment)
 
+	// Instantiate a new builder, init using the same params.
+	builder = newEmptyBuilder("atxBuilder3", id, coinbase, activationDb, layers, postProver, lg)
+	assert.Nil(t, builder.commitment)
+	err = builder.StartPost(coinbase2, drive, 1024)
+	assert.NoError(t, err)
+	time.Sleep(100 * time.Millisecond) // Introducing a small delay since the procedure is async.
+	assert.NotNil(t, builder.commitment)
+	assert.Equal(t, postProver.Cfg().SpacePerUnit, uint64(1024))
+
 	// Instantiate a new builder and call StartPost on the same datadir, which is already initialized,
 	// and so will result in running the execution phase instead of the initialization phase.
 	// This test verifies that a call to StartPost with a different space param will return an error.
-	// execBuilder := NewBuilder(id, coinbase, &MockSigning{}, activationDb, &FaultyNetMock{}, layers, layersPerEpoch, nipstBuilder, postProver, layerClock, &mockSyncer{}, db, lg.WithName("atxBuilder"))
-	execBuilder := newEmptyBuilder("atxBuilder", id, coinbase, postProver, lg)
+	execBuilder := newEmptyBuilder("atxBuilder4", id, coinbase, activationDb, layers, postProver, lg)
 	err = execBuilder.StartPost(coinbase2, drive, 2048)
 	assert.EqualError(t, err, "config mismatch")
 
