@@ -247,6 +247,42 @@ func (b *Builder) StartPost(rewardAddress types.Address, dataDir string, space u
 		}
 	}
 
+	// If the DB already contains an ATX, don't generate a new one unless the previous one
+	// is expired
+	b.discardChallengeIfStale()
+	if err := b.loadChallenge(); err != nil {
+		log.Info("error loading challenge: %s", err)
+	} else {
+		hash, err := b.challenge.Hash()
+		if err != nil {
+			b.log.Error("getting challenge hash failed: %v", err)
+			// fmt.Errorf("getting challenge hash failed: %v", err)
+		} else {
+			b.log.Info("challenge hash: %v", hash)
+		}
+		// log.With().Info("Got challenge",
+		// 	log.String("commitment merkle root", fmt.Sprintf("%x", b.challenge.CommitmentMerkleRoot)),
+		// )
+
+		// TODO: how to make sure the stored challenge matches our input params?
+	}
+	// if posAtx, err := b.GetPositioningAtx(); err != nil {
+	// 	if !b.currentEpoch().IsGenesis() {
+	// 		return fmt.Errorf("failed to get positioning ATX: %v", err)
+	// 	}
+	// } else {
+	// 	atxEpoch := posAtx.PubLayerIdx.GetEpoch(b.layersPerEpoch)
+	// 	b.log.With().Info("Found previous ATX",
+	// 		log.Uint64("atx epoch", uint64(atxEpoch)),
+	// 		log.Uint64("cur epoch", uint64(b.currentEpoch())),
+	// 	)
+	// 	if atxEpoch+1 < b.currentEpoch() {
+	// 		b.log.Info("Previous ATX is expired")
+	// 	} else {
+	// 		b.log.Info("Previous ATX still fresh")
+	// 	}
+	// }
+
 	b.log.With().Info("Starting PoST initialization",
 		log.String("datadir", dataDir),
 		log.String("space", fmt.Sprintf("%d", space)),
