@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/spacemeshos/go-spacemesh/common/types"
 	"hash/fnv"
 	"sort"
+
+	"github.com/spacemeshos/go-spacemesh/common/types"
 )
 
 type instanceID types.LayerID
@@ -15,11 +16,12 @@ type messageType byte
 
 // declare all known message types
 const (
-	status   messageType = 0
-	proposal messageType = 1
-	commit   messageType = 2
-	notify   messageType = 3
-	pre      messageType = 10
+	status        messageType = 0
+	proposal      messageType = 1
+	commit        messageType = 2
+	notify        messageType = 3
+	pre           messageType = 10
+	certification messageType = 11
 )
 
 // declare round identifiers

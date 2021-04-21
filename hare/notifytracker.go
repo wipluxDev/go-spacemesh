@@ -11,6 +11,8 @@ type notifyTracker struct {
 	notifies     map[string]struct{} // tracks PubKey->Notification
 	tracker      *RefCountTracker    // tracks ref count to each seen set
 	certificates map[uint32]struct{} // tracks Set->certificate
+	//also store the notify messages themselves, for the certificate
+	notificationMessages map[uint32][]*Message // tracks Set->Messages
 }
 
 func newNotifyTracker(expectedSize int) *notifyTracker {
@@ -36,7 +38,14 @@ func (nt *notifyTracker) OnNotify(msg *Msg) bool {
 	// track that set
 	s := NewSet(msg.InnerMsg.Values)
 	nt.onCertificate(msg.InnerMsg.Cert.AggMsgs.Messages[0].InnerMsg.K, s)
-	nt.tracker.Track(s.ID())
+	setID := s.ID()
+	nt.tracker.Track(setID)
+
+	//store the message to create a certificate for the certification messages
+	if _, exists := nt.notificationMessages[setID]; !exists {
+		nt.notificationMessages[setID] = make([]*Message, 0)
+	}
+	nt.notificationMessages[setID] = append(nt.notificationMessages[setID], msg.Message)
 
 	return false
 }
@@ -73,4 +82,20 @@ func (nt *notifyTracker) onCertificate(k int32, set *Set) {
 func (nt *notifyTracker) HasCertificate(k int32, set *Set) bool {
 	_, exist := nt.certificates[calcID(k, set)]
 	return exist
+}
+
+// BuildCertificate builds a certificate of all the notify messages to send as part of the termination certification
+func (nt *notifyTracker) BuildCertificate(s *Set) *certificate {
+	// assume for now that you'll always be able to make a valid certificate
+	c := &certificate{}
+	c.Values = s.ToSlice()
+	c.AggMsgs = &aggregatedMessages{}
+	c.AggMsgs.Messages = nt.notificationMessages[s.ID()]
+
+	//figure out if any further optimizations have to occur
+	for _, commit := range c.AggMsgs.Messages {
+		commit.InnerMsg.Values = nil
+	}
+
+	return c
 }

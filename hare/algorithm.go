@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/nullstyle/go-xdr/xdr3"
+	"time"
+
+	xdr "github.com/nullstyle/go-xdr/xdr3"
 	"github.com/spacemeshos/ed25519"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
@@ -13,7 +15,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	"github.com/spacemeshos/go-spacemesh/priorityq"
 	"github.com/spacemeshos/go-spacemesh/signing"
-	"time"
 )
 
 const protoName = "HARE_PROTOCOL"
@@ -21,10 +22,13 @@ const protoName = "HARE_PROTOCOL"
 type role byte
 
 const ( // constants of the different roles
-	passive = role(0)
-	active  = role(1)
-	leader  = role(2)
+	passive   = role(0)
+	active    = role(1)
+	leader    = role(2)
+	certifier = role(3)
 )
+
+const hareEligibility int32 = -2
 
 // Rolacle is the roles oracle provider.
 type Rolacle interface {
@@ -177,6 +181,7 @@ type consensusProcess struct {
 	notifySent        bool            // flag to set in case a notification had already been sent by this instance
 	mTracker          *msgsTracker    // tracks valid messages
 	terminating       bool
+	hareCertifier     bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
 }
 
 // newConsensusProcess creates a new consensus process instance.
@@ -199,6 +204,7 @@ func newConsensusProcess(cfg config.Config, instanceID instanceID, s *Set, oracl
 		pending:           make(map[string]*Msg, cfg.N),
 		Log:               logger,
 		mTracker:          msgsTracker,
+		hareCertifier:     false,
 	}
 	proc.validator = newSyntaxContextValidator(signing, cfg.F+1, proc.statusValidator(), stateQuerier, layersPerEpoch, ev, msgsTracker, logger)
 
@@ -269,6 +275,8 @@ func (proc *consensusProcess) eventLoop() {
 
 	// check participation and send message
 	go func() {
+		//check hare certification
+		proc.hareCertifier = proc.isHareCertifier()
 		// check participation
 		if proc.shouldParticipate() {
 			// set pre-round InnerMsg and send
@@ -758,6 +766,19 @@ func (proc *consensusProcess) processNotifyMsg(msg *Msg) {
 
 	// enough notifications, should terminate
 	proc.s = s // update to the agreed set
+	// should send out a Hare termination message
+
+	if proc.hareCertifier {
+		builder, err := proc.initDefaultBuilder(proc.s)
+		if err != nil {
+			proc.With().Error("init default builder failed", log.Err(err))
+			return
+		}
+		certifyCert := proc.notifyTracker.BuildCertificate(proc.s)
+		builder = builder.SetType(certification).SetCertificate(certifyCert).Sign(proc.signing)
+		certifyMsg := builder.Build()
+		proc.sendMessage(certifyMsg)
+	}
 	proc.Event().Info("consensus process terminated",
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
@@ -810,6 +831,36 @@ func (proc *consensusProcess) endOfStatusRound() {
 		log.Bool("is_svp_ready", proc.statusesTracker.IsSVPReady()),
 		types.LayerID(proc.instanceID),
 		log.String("analyze_duration", time.Since(before).String()))
+}
+
+// checks if we are to be a Hare Certifer for this layer
+// returns true if yes, false otherwise
+func (proc *consensusProcess) isHareCertifier() bool {
+	res, err := proc.oracle.IsIdentityActiveOnConsensusView(proc.signing.PublicKey().String(), types.LayerID(proc.instanceID))
+	if err != nil {
+		proc.With().Error("should not participate: error checking our identity for activeness",
+			log.Err(err), types.LayerID(proc.instanceID))
+		return false
+	}
+
+	if !res {
+		proc.With().Info("should not participate: identity is not active",
+			types.LayerID(proc.instanceID))
+		return false
+	}
+
+	proof, err := proc.oracle.Proof(types.LayerID(proc.instanceID), hareEligibility)
+	if err != nil {
+		proc.With().Error("could not retrieve eligibility proof from oracle", log.Err(err))
+		return false
+	}
+	res, err = proc.oracle.Eligible(types.LayerID(proc.instanceID),
+		hareEligibility, expectedCommitteeSize(proc.k, proc.cfg.N, proc.cfg.ExpectedLeaders), proc.nid, proof)
+	if err != nil {
+		proc.With().Error("failed to check eligibility", log.Err(err))
+		return false
+	}
+	return res //true if eligible, false if not
 }
 
 // checks if we should participate in the current round

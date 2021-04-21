@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/nullstyle/go-xdr/xdr3"
+
+	xdr "github.com/nullstyle/go-xdr/xdr3"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/signing"
@@ -56,6 +57,7 @@ type aggregatedMessages struct {
 }
 
 // innerMessage is the actual set of fields that describe a message in the Hare protocol.
+// TODO: add a struct for notify messages (type of certificate)
 type innerMessage struct {
 	Type       messageType
 	InstanceID instanceID
