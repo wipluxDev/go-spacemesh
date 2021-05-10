@@ -20,6 +20,7 @@ func newNotifyTracker(expectedSize int) *notifyTracker {
 	nt.notifies = make(map[string]struct{}, expectedSize)
 	nt.tracker = NewRefCountTracker()
 	nt.certificates = make(map[uint32]struct{}, expectedSize)
+	nt.notificationMessages = make(map[uint32][]*Message)
 
 	return nt
 }
