@@ -4,6 +4,7 @@ package node
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spacemeshos/amcl"
-	"github.com/spacemeshos/amcl/BLS381"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -50,9 +49,6 @@ func (suite *AppTestSuite) SetupTest() {
 }
 
 func (suite *AppTestSuite) TearDownTest() {
-	if err := suite.poetCleanup(true); err != nil {
-		log.Error("error while cleaning up PoET: %v", err)
-	}
 	for _, dbinst := range suite.dbs {
 		if err := os.RemoveAll(dbinst); err != nil {
 			panic(fmt.Sprintf("what happened : %v", err))
@@ -76,16 +72,22 @@ func Test_PoETHarnessSanity(t *testing.T) {
 	require.NotNil(t, h)
 }
 
-func (suite *AppTestSuite) initMultipleInstances(cfg *config.Config, rolacle *eligibility.FixedRolacle, rng *amcl.RAND, numOfInstances int, storeFormat string, genesisTime string, poetClient *activation.HTTPPoetClient, clock TickProvider, network network) {
+func (suite *AppTestSuite) initMultipleInstances(cfg *config.Config, rolacle *eligibility.FixedRolacle, numOfInstances int, storeFormat string, genesisTime string, poetClient *activation.HTTPPoetClient, clock TickProvider, network network) {
 	name := 'a'
 	for i := 0; i < numOfInstances; i++ {
 		dbStorepath := storeFormat + string(name)
 		database.SwitchCreationContext(dbStorepath, string(name))
-		smApp, err := InitSingleInstance(*cfg, i, genesisTime, rng, dbStorepath, rolacle, poetClient, clock, network)
+		smApp, err := InitSingleInstance(*cfg, i, genesisTime, dbStorepath, rolacle, poetClient, clock, network)
 		assert.NoError(suite.T(), err)
 		suite.apps = append(suite.apps, smApp)
 		suite.dbs = append(suite.dbs, dbStorepath)
 		name++
+	}
+}
+
+func (suite *AppTestSuite) ClosePoet() {
+	if err := suite.poetCleanup(true); err != nil {
+		log.Error("error while cleaning up PoET: %v", err)
 	}
 }
 
@@ -125,7 +127,6 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}()
 
 	rolacle := eligibility.New()
-	rng := BLS381.DefaultSeed()
 
 	gTime, err := time.Parse(time.RFC3339, genesisTime)
 	if err != nil {
@@ -133,16 +134,17 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}
 	ld := time.Duration(20) * time.Second
 	clock := timesync.NewClock(timesync.RealClock{}, ld, gTime, log.NewDefault("clock"))
-	suite.initMultipleInstances(cfg, rolacle, rng, 5, path, genesisTime, poetHarness.HTTPPoetClient, clock, net)
+	suite.initMultipleInstances(cfg, rolacle, 5, path, genesisTime, poetHarness.HTTPPoetClient, clock, net)
 
 	// We must shut down before running the rest of the tests or we'll get an error about resource unavailable
 	// when we try to allocate more database files. Wrap this context neatly in an inline func.
 	var oldRoot types.Hash32
 	func() {
 		defer GracefulShutdown(suite.apps)
+		defer suite.ClosePoet()
 
 		for _, a := range suite.apps {
-			a.startServices()
+			a.startServices(context.TODO(), log.AppLog)
 		}
 
 		ActivateGrpcServer(suite.apps[0])
@@ -193,12 +195,12 @@ func (suite *AppTestSuite) TestMultipleNodes() {
 	}()
 
 	// this tests loading of previous state, maybe it's not the best place to put this here...
-	smApp, err := InitSingleInstance(*cfg, 0, genesisTime, rng, path+"a", rolacle, poetHarness.HTTPPoetClient, clock, net)
+	smApp, err := InitSingleInstance(*cfg, 0, genesisTime, path+"a", rolacle, poetHarness.HTTPPoetClient, clock, net)
 	assert.NoError(suite.T(), err)
 	// test that loaded root is equal
 	assert.Equal(suite.T(), oldRoot, smApp.state.GetStateRoot())
 	// start and stop and test for no panics
-	smApp.startServices()
+	smApp.startServices(context.TODO(), log.AppLog)
 	smApp.stopServices()
 }
 
@@ -549,6 +551,11 @@ func TestShutdown(t *testing.T) {
 	smApp.Config.HareEligibility.EpochOffset = 0
 	smApp.Config.StartMining = true
 
+	smApp.Config.FETCH.RequestTimeout = 1
+	smApp.Config.FETCH.BatchTimeout = 1
+	smApp.Config.FETCH.BatchSize = 5
+	smApp.Config.FETCH.MaxRetiresForPeer = 5
+
 	rolacle := eligibility.New()
 	types.SetLayersPerEpoch(int32(smApp.Config.LayersPerEpoch))
 
@@ -558,8 +565,8 @@ func TestShutdown(t *testing.T) {
 	poetHarness, err := activation.NewHTTPPoetHarness(false)
 	r.NoError(err, "failed creating poet client harness: %v", err)
 
-	vrfPriv, vrfPub := BLS381.GenKeyPair(BLS381.DefaultSeed())
-	vrfSigner := BLS381.NewBlsSigner(vrfPriv)
+	vrfSigner, vrfPub, err := signing.NewVRFSigner(pub.Bytes())
+	r.NoError(err, "failed to create vrf signer")
 	nodeID := types.NodeID{Key: pub.String(), VRFPublicKey: vrfPub}
 
 	swarm := net.NewNode()
@@ -576,11 +583,11 @@ func TestShutdown(t *testing.T) {
 	gTime := genesisTime
 	ld := time.Duration(20) * time.Second
 	clock := timesync.NewClock(timesync.RealClock{}, ld, gTime, log.NewDefault("clock"))
-	err = smApp.initServices(nodeID, swarm, dbStorepath, edSgn, false, hareOracle, uint32(smApp.Config.LayerAvgSize), postClient, poetHarness.HTTPPoetClient, vrfSigner, uint16(smApp.Config.LayersPerEpoch), clock)
+	err = smApp.initServices(context.TODO(), log.AppLog, nodeID, swarm, dbStorepath, edSgn, false, hareOracle, uint32(smApp.Config.LayerAvgSize), postClient, poetHarness.HTTPPoetClient, vrfSigner, uint16(smApp.Config.LayersPerEpoch), clock)
 
 	r.NoError(err)
 
-	smApp.startServices()
+	smApp.startServices(context.TODO(), log.AppLog)
 	ActivateGrpcServer(smApp)
 
 	r.NoError(poetHarness.Teardown(true))

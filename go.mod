@@ -20,7 +20,6 @@ require (
 	github.com/prometheus/common v0.4.0
 	github.com/seehuhn/mt19937 v0.0.0-20180715112136-cc7708819361
 	github.com/smartystreets/goconvey v0.0.0-20190731233626-505e41936337 // indirect
-	github.com/spacemeshos/amcl v0.0.2
 	github.com/spacemeshos/api/release/go v0.0.0-20201210094223-105249951c66
 	github.com/spacemeshos/ed25519 v0.0.0-20190530014421-e235766d15a1
 	github.com/spacemeshos/merkle-tree v0.0.0-20191028110812-1908c3126c82
@@ -35,7 +34,7 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20190318030020-c3a204f8e965
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/net v0.0.0-20201006153459-a7d1128ccaa0
+	golang.org/x/net v0.0.0-20201006153459-a7d1128ccaa0 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	golang.org/x/sys v0.0.0-20201007165808-a893ed343c85 // indirect
 	google.golang.org/api v0.32.0
