@@ -1,8 +1,9 @@
 package hare
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func BuildNotifyMsg(signing Signer, s *Set) *Msg {
@@ -44,4 +45,23 @@ func TestNotifyTracker_NotificationsCount(t *testing.T) {
 	assert.Equal(t, 1, tracker.NotificationsCount(s))
 	tracker.OnNotify(BuildNotifyMsg(generateSigning(t), s))
 	assert.Equal(t, 2, tracker.NotificationsCount(s))
+}
+
+func TestNotifyTracker_NotificationMessage(t *testing.T) {
+	s := NewEmptySet(lowDefaultSize)
+	s2 := NewEmptySet(lowDefaultSize)
+	s.Add(value1)
+	s2.Add(value2)
+	tracker := newNotifyTracker(lowDefaultSize)
+	msg1 := BuildNotifyMsg(generateSigning(t), s)
+	tracker.OnNotify(msg1)
+	assert.Equal(t, 1, len(tracker.notificationMessages[s.ID()]))
+	assert.Equal(t, msg1.Message, tracker.notificationMessages[s.ID()][0])
+	msg2 := BuildNotifyMsg(generateSigning(t), s)
+	tracker.OnNotify(msg2)
+	assert.Equal(t, 2, len(tracker.notificationMessages[s.ID()]))
+	assert.Equal(t, msg2.Message, tracker.notificationMessages[s.ID()][1])
+	msg3 := BuildNotifyMsg(generateSigning(t), s2)
+	tracker.OnNotify(msg3)
+	assert.Equal(t, 2, len(tracker.notificationMessages[s.ID()]))
 }
