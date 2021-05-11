@@ -790,8 +790,8 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 		}
 		certifyCert := proc.notifyTracker.BuildCertificate(proc.s)
 		builder = builder.SetType(certification).SetCertificate(certifyCert).Sign(proc.signing)
-		certifyMsg := builder.Build()
-		proc.sendMessage(ctx, certifyMsg)
+		//certifyMsg := builder.Build()
+		//proc.sendMessage(ctx, certifyMsg)
 	}
 	proc.WithContext(ctx).Event().Info("consensus process terminated",
 		log.String("current_set", proc.s.String()),
