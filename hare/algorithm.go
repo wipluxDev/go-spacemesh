@@ -194,7 +194,7 @@ type consensusProcess struct {
 	notifySent        bool            // flag to set in case a notification had already been sent by this instance
 	mTracker          *msgsTracker    // tracks valid messages
 	terminating       bool
-	hareCertifier     bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
+	shouldCertify     bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
 }
 
 // newConsensusProcess creates a new consensus process instance.
@@ -217,7 +217,7 @@ func newConsensusProcess(cfg config.Config, instanceID instanceID, s *Set, oracl
 		pending:           make(map[string]*Msg, cfg.N),
 		Log:               logger,
 		mTracker:          msgsTracker,
-		hareCertifier:     false,
+		shouldCertify:     false,
 	}
 	proc.validator = newSyntaxContextValidator(signing, cfg.F+1, proc.statusValidator(), stateQuerier, layersPerEpoch, ev, msgsTracker, logger)
 
@@ -291,7 +291,7 @@ func (proc *consensusProcess) eventLoop(ctx context.Context) {
 	// check participation and send message
 	go func() {
 		//check hare certification
-		proc.hareCertifier = proc.isHareCertifier(ctx)
+		proc.shouldCertify = proc.isHareCertifier(ctx)
 		// check participation
 		if proc.shouldParticipate(ctx) {
 			// set pre-round InnerMsg and send
@@ -785,7 +785,7 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 	proc.s = s // update to the agreed set
 	// should send out a Hare termination message
 
-	if proc.hareCertifier {
+	if proc.shouldCertify {
 		builder, err := proc.initDefaultBuilder(proc.s)
 		if err != nil {
 			proc.With().Error("init default builder failed", log.Err(err))
@@ -812,18 +812,16 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 }
 
 func (proc *consensusProcess) processCertificationMessage(ctx context.Context, msg *Msg) {
-	// we know that the certification message has been validated, therefore, we can terminate
-	// do we need to send this out as part of hare certification?
-	// need to store it for hdist layers
+	// we know that the certification message has been validated
 	proc.s = NewSet(msg.InnerMsg.Values)
-	proc.WithContext(ctx).Event().Info("consensus process terminated",
+
+	proc.WithContext(ctx).Event().Info("received certification message",
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
 		types.LayerID(proc.instanceID),
 		log.Int("set_size", proc.s.Size()))
-	proc.report(completed)
-	close(proc.CloseChannel())
-	proc.terminating = true
+
+	//store the message into the meshdb
 }
 
 func (proc *consensusProcess) currentRound() int {
