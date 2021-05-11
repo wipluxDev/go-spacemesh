@@ -796,6 +796,11 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 		//certifyMsg := builder.Build()
 		//proc.sendMessage(ctx, certifyMsg)
 	}
+
+	//check if the process already received a hare certification message and thus terminated
+	if proc.terminating {
+		return
+	}
 	proc.WithContext(ctx).Event().Info("consensus process terminated",
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
@@ -808,6 +813,8 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 
 func (proc *consensusProcess) processCertificationMessage(ctx context.Context, msg *Msg) {
 	// we know that the certification message has been validated, therefore, we can terminate
+	// do we need to send this out as part of hare certification?
+	// need to store it for hdist layers
 	proc.s = NewSet(msg.InnerMsg.Values)
 	proc.WithContext(ctx).Event().Info("consensus process terminated",
 		log.String("current_set", proc.s.String()),
