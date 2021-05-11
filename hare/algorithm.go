@@ -481,6 +481,9 @@ func (proc *consensusProcess) processMsg(ctx context.Context, m *Msg) {
 		proc.processCommitMsg(ctx, m)
 	case notify: // end of round 4
 		proc.processNotifyMsg(ctx, m)
+	case certification:
+		// handle the certification message
+		proc.processCertificationMessage(ctx, m)
 	default:
 		proc.WithContext(ctx).With().Warning("unknown message type",
 			log.String("msg_type", m.InnerMsg.Type.String()),
@@ -793,6 +796,19 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 		//certifyMsg := builder.Build()
 		//proc.sendMessage(ctx, certifyMsg)
 	}
+	proc.WithContext(ctx).Event().Info("consensus process terminated",
+		log.String("current_set", proc.s.String()),
+		log.Int32("current_k", proc.k),
+		types.LayerID(proc.instanceID),
+		log.Int("set_size", proc.s.Size()))
+	proc.report(completed)
+	close(proc.CloseChannel())
+	proc.terminating = true
+}
+
+func (proc *consensusProcess) processCertificationMessage(ctx context.Context, msg *Msg) {
+	// we know that the certification message has been validated, therefore, we can terminate
+	proc.s = NewSet(msg.InnerMsg.Values)
 	proc.WithContext(ctx).Event().Info("consensus process terminated",
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
