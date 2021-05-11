@@ -3,11 +3,12 @@ package hare
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type truer struct {
@@ -52,6 +53,41 @@ func TestMessageValidator_ValidateCertificate(t *testing.T) {
 	}
 	cert.AggMsgs.Messages = msgs
 	assert.True(t, validator.validateCertificate(context.TODO(), cert))
+}
+
+func TestMessageValidator_ValidateTerminationCertificate(t *testing.T) {
+	validator := defaultValidator()
+	assert.False(t, validator.validateTerminationCertificate(context.TODO(), nil))
+	cert := &certificate{}
+	terminationCert := &certificate{}
+	assert.False(t, validator.validateTerminationCertificate(context.TODO(), terminationCert))
+	cert.AggMsgs = &aggregatedMessages{}
+	terminationCert.AggMsgs = &aggregatedMessages{}
+	assert.False(t, validator.validateTerminationCertificate(context.TODO(), terminationCert))
+	msgs := make([]*Message, 0, validator.threshold)
+	cert.AggMsgs.Messages = msgs
+	terminationCert.AggMsgs.Messages = msgs
+	assert.False(t, validator.validateTerminationCertificate(context.TODO(), terminationCert))
+	msgs = append(msgs, &Message{})
+	cert.AggMsgs.Messages = msgs
+	terminationCert.AggMsgs.Messages = msgs
+	assert.False(t, validator.validateTerminationCertificate(context.TODO(), terminationCert))
+	cert.Values = NewSetFromValues(value1).ToSlice()
+	terminationCert.Values = NewSetFromValues(value1).ToSlice()
+	assert.False(t, validator.validateTerminationCertificate(context.TODO(), terminationCert))
+
+	msgs = make([]*Message, validator.threshold)
+	for i := 0; i < validator.threshold; i++ {
+		msgs[i] = BuildCommitMsg(generateSigning(t), NewDefaultEmptySet()).Message
+	}
+	cert.AggMsgs.Messages = msgs
+	notifymsgs := make([]*Message, validator.threshold)
+	for i := 0; i < validator.threshold; i++ {
+		notifymsgs[i] = BuildNotifyMsg(generateSigning(t), NewDefaultEmptySet()).Message
+		notifymsgs[i].InnerMsg.Cert = cert
+	}
+	terminationCert.AggMsgs.Messages = notifymsgs
+	assert.True(t, validator.validateTerminationCertificate(context.TODO(), cert))
 }
 
 func TestEligibilityValidator_validateRole(t *testing.T) {
