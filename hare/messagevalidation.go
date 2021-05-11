@@ -3,10 +3,11 @@ package hare
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/signing"
-	"time"
 )
 
 type messageValidator interface {
@@ -213,6 +214,8 @@ func (v *syntaxContextValidator) ContextuallyValidateMessage(ctx context.Context
 			return errInvalidIter
 		}
 		return errInvalidRound
+	case certification:
+		return nil
 	}
 
 	return errUnexpectedType
@@ -266,6 +269,8 @@ func (v *syntaxContextValidator) SyntacticallyValidateMessage(ctx context.Contex
 		return claimedRound == commitRound
 	case notify:
 		return v.validateCertificate(ctx, m.InnerMsg.Cert)
+	case certification:
+		return v.validateTerminationCertificate(ctx, m.InnerMsg.Cert)
 	default:
 		logger.With().Error("unknown message type encountered during syntactic validation",
 			log.String("msg_type", m.InnerMsg.Type.String()))
@@ -459,6 +464,108 @@ func validateCommitType(m *Msg) bool {
 
 func validateStatusType(m *Msg) bool {
 	return messageType(m.InnerMsg.Type) == status
+}
+
+func (v *syntaxContextValidator) validateTerminationCertificate(ctx context.Context, cert *certificate) bool {
+	logger := v.WithContext(ctx)
+
+	defer func(startTime time.Time) {
+		logger.With().Debug("certificate validation duration",
+			log.String("duration", time.Now().Sub(startTime).String()))
+	}(time.Now())
+
+	if cert == nil {
+		logger.Warning("certificate validation failed: certificate is nil")
+		return false
+	}
+
+	// loggererify agg msgs
+	if cert.AggMsgs == nil {
+		logger.Warning("certificate validation failed: AggMsgs is nil")
+		return false
+	}
+
+	// refill Values
+	for _, notify := range cert.AggMsgs.Messages {
+		if notify.InnerMsg == nil {
+			logger.Warning("certificate validation failed: inner commit message is nil")
+			return false
+		}
+		if notify.InnerMsg.Cert == nil {
+			logger.Warning("certificate validation failed: notify message does not have an associated certificate")
+		}
+		notify.InnerMsg.Values = cert.Values
+	}
+
+	// Note: no need to validate notify.Values=commits.Values because we refill the InnerMsg with notify.Values
+	// validateSameK := func(m *Msg) bool { return m.InnerMsg.K == cert.AggMsgs.Messages[0].InnerMsg.K }
+	// validators := []func(m *Msg) bool{validateCommitType, validateSameK}
+	if err := v.validateAggregatedTerminationMessage(ctx, cert.AggMsgs); err != nil {
+		logger.With().Warning("Certificate validation failed: aggregated messages validation failed", log.Err(err))
+		return false
+	}
+
+	return true
+}
+
+func (v *syntaxContextValidator) validateAggregatedTerminationMessage(ctx context.Context, aggMsg *aggregatedMessages) error {
+
+	if aggMsg == nil {
+		return errNilAggMsgs
+	}
+
+	if aggMsg.Messages == nil { // must contain notify Messages
+		return errNilMsgsSlice
+	}
+
+	if len(aggMsg.Messages) != v.threshold { // must include exactly f+1 Messages
+		v.WithContext(ctx).With().Warning("aggregated validation failed: number of messages does not match",
+			log.Int("expected", v.threshold),
+			log.Int("actual", len(aggMsg.Messages)))
+		return errMsgsCountMismatch
+	}
+
+	senders := make(map[string]struct{})
+	for _, innerMsg := range aggMsg.Messages {
+		// check if exist in cache of valid messages
+		// if pub := v.validMsgsTracker.PublicKey(innerMsg); pub != nil {
+		// 	// validate unique sender
+		// 	if _, exist := senders[pub.String()]; exist { // pub already exist
+		// 		return errDupSender
+		// 	}
+		// 	senders[pub.String()] = struct{}{} // mark sender as exist
+
+		// 	// passed validation, continue to next message
+		// 	continue
+		// }
+
+		// extract public key
+		var iMsg, err = newMsg(ctx, innerMsg, v.stateQuerier)
+		if err != nil {
+			return err
+		}
+
+		pub := iMsg.PubKey
+		// validate unique sender
+		if _, exist := senders[pub.String()]; exist { // pub already exist
+			return errDupSender
+		}
+		senders[pub.String()] = struct{}{} // mark sender as exist
+
+		if !v.SyntacticallyValidateMessage(ctx, iMsg) {
+			return errInnerSyntax
+		}
+
+		// validate role
+		if !v.roleValidator.Validate(ctx, iMsg) {
+			return errInnerEligibility
+		}
+
+		// the message is valid, track it
+		//v.validMsgsTracker.Track(iMsg)
+	}
+
+	return nil
 }
 
 // validate SVP for type A (where all Ki=-1)
