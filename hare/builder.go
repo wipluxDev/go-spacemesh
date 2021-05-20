@@ -44,8 +44,9 @@ func (m *Message) Field() log.Field {
 	return log.String("message", m.String())
 }
 
-// certificate is a collection of messages and the set of values.
-// Typically used as a collection of commit messages.
+// Cdertificate is a collection of messages and the set of values.
+// Typically used as a collection of commit messages, but also used as a collection of
+// notify messages for termination certification
 type Certificate struct {
 	Values  []types.BlockID // the committed set S
 	AggMsgs *aggregatedMessages
