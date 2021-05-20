@@ -37,6 +37,7 @@ type TerminationOutput interface {
 	Completed() bool
 }
 
+// CertificationOutput represents a certificate received
 type CertificationOutput interface {
 	ID() instanceID
 	Certificate() *certificate
@@ -50,7 +51,7 @@ type layers interface {
 // checks if the collected output is valid
 type outputValidationFunc func(blocks []types.BlockID) bool
 
-type CertificateAndLayer struct {
+type certificateAndLayer struct {
 	certificate *certificate
 	id          instanceID
 }
@@ -344,7 +345,7 @@ func (h *Hare) certificateCollectionLoop(ctx context.Context) {
 	for {
 		select {
 		case out := <-h.certificateChan:
-			certAndL := &CertificateAndLayer{
+			certAndL := certificateAndLayer{
 				certificate: out.Certificate(),
 				id:          out.ID(),
 			}
