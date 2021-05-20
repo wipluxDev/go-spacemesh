@@ -2,6 +2,9 @@ package hare
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
@@ -9,8 +12,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/p2p"
 	signing2 "github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/stretchr/testify/suite"
-	"testing"
-	"time"
 )
 
 // Integration Tests
@@ -57,8 +58,9 @@ func Test_16Nodes_HareIntegrationSuite(t *testing.T) {
 		lg := log.NewDefault(signing.PublicKey().String())
 		broker := newBroker(s, newEligibilityValidator(eligibility.New(), 10, &mockIDProvider{}, cfg.N, cfg.ExpectedLeaders, lg), NewMockStateQuerier(), (&mockSyncer{true}).IsSynced, 10, cfg.LimitIterations, Closer{}, lg)
 		output := make(chan TerminationOutput, 1)
+		certOutput := make(chan CertificationOutput)
 		oracle.Register(true, signing.PublicKey().String())
-		proc := newConsensusProcess(cfg, instanceID1, his.initialSets[idx], oracle, NewMockStateQuerier(), 10, signing, types.NodeID{}, s, output, truer{}, lg)
+		proc := newConsensusProcess(cfg, instanceID1, his.initialSets[idx], oracle, NewMockStateQuerier(), 10, signing, types.NodeID{}, s, output, certOutput, truer{}, lg)
 		c, _ := broker.Register(context.TODO(), proc.ID())
 		proc.SetInbox(c)
 		broker.Start(context.TODO())
@@ -110,8 +112,9 @@ func Test_20Nodes_HareIntegrationSuite(t *testing.T) {
 		lg := log.NewDefault(signing.PublicKey().String())
 		broker := newBroker(s, newEligibilityValidator(eligibility.New(), 10, &mockIDProvider{}, cfg.N, cfg.ExpectedLeaders, lg), NewMockStateQuerier(), (&mockSyncer{true}).IsSynced, 10, cfg.LimitIterations, Closer{}, lg)
 		output := make(chan TerminationOutput, 1)
+		certOutput := make(chan CertificationOutput, 1)
 		oracle.Register(true, signing.PublicKey().String())
-		proc := newConsensusProcess(cfg, instanceID1, his.initialSets[idx], oracle, NewMockStateQuerier(), 10, signing, types.NodeID{}, s, output, truer{}, log.NewDefault(signing.PublicKey().String()))
+		proc := newConsensusProcess(cfg, instanceID1, his.initialSets[idx], oracle, NewMockStateQuerier(), 10, signing, types.NodeID{}, s, output, certOutput, truer{}, log.NewDefault(signing.PublicKey().String()))
 		c, _ := broker.Register(context.TODO(), proc.ID())
 		proc.SetInbox(c)
 		broker.Start(context.TODO())

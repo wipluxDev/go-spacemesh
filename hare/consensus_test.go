@@ -2,14 +2,15 @@ package hare
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/p2p/service"
 	signing2 "github.com/spacemeshos/go-spacemesh/signing"
-	"testing"
-	"time"
 )
 
 // Test the consensus process as a whole
@@ -138,9 +139,11 @@ func createConsensusProcess(isHonest bool, cfg config.Config, oracle fullRolacle
 	broker := buildBroker(network, name)
 	broker.Start(context.TODO())
 	output := make(chan TerminationOutput, 1)
+	certOutput := make(chan CertificationOutput, 1)
 	signing := signing2.NewEdSigner()
 	oracle.Register(isHonest, signing.PublicKey().String())
-	proc := newConsensusProcess(cfg, layer, initialSet, oracle, NewMockStateQuerier(), 10, signing, types.NodeID{Key: signing.PublicKey().String(), VRFPublicKey: []byte{}}, network, output, truer{}, log.NewDefault(signing.PublicKey().ShortString()))
+	proc := newConsensusProcess(cfg, layer, initialSet, oracle, NewMockStateQuerier(), 10, signing, types.NodeID{Key: signing.PublicKey().String(), VRFPublicKey: []byte{}}, network, output,
+		certOutput, truer{}, log.NewDefault(signing.PublicKey().ShortString()))
 	c, _ := broker.Register(context.TODO(), proc.ID())
 	proc.SetInbox(c)
 

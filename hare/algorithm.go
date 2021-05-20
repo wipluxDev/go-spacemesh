@@ -55,6 +55,19 @@ const (
 	notCompleted = false
 )
 
+type certificateReport struct {
+	id          instanceID
+	certificate *certificate
+}
+
+func (cr certificateReport) ID() instanceID {
+	return cr.id
+}
+
+func (cr certificateReport) Certificate() *certificate {
+	return cr.certificate
+}
+
 // procReport is the termination report of the CP.
 // It consists of the layer id, the set we agreed on (if available) and a flag to indicate if the CP completed.
 type procReport struct {
@@ -77,6 +90,10 @@ func (cpo procReport) Completed() bool {
 
 func (proc *consensusProcess) report(completed bool) {
 	proc.terminationReport <- procReport{proc.instanceID, proc.s, completed}
+}
+
+func (proc *consensusProcess) reportCertificate(cert *certificate) {
+	proc.certificationReport <- certificateReport{proc.instanceID, cert}
 }
 
 var _ TerminationOutput = (*procReport)(nil)
@@ -175,49 +192,53 @@ type consensusProcess struct {
 	log.Log
 	State
 	Closer
-	instanceID        instanceID // the layer id
-	oracle            Rolacle    // the roles oracle provider
-	signing           Signer
-	nid               types.NodeID
-	network           NetworkService
-	isStarted         bool
-	inbox             chan *Msg
-	terminationReport chan TerminationOutput
-	validator         messageValidator
-	preRoundTracker   *preRoundTracker
-	statusesTracker   *statusTracker
-	proposalTracker   proposalTrackerProvider
-	commitTracker     commitTrackerProvider
-	notifyTracker     *notifyTracker
-	cfg               config.Config
-	pending           map[string]*Msg // buffer for early messages that are pending process
-	notifySent        bool            // flag to set in case a notification had already been sent by this instance
-	mTracker          *msgsTracker    // tracks valid messages
-	terminating       bool
-	shouldCertify     bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
+	instanceID          instanceID // the layer id
+	oracle              Rolacle    // the roles oracle provider
+	signing             Signer
+	nid                 types.NodeID
+	network             NetworkService
+	isStarted           bool
+	inbox               chan *Msg
+	terminationReport   chan TerminationOutput
+	certificationReport chan CertificationOutput
+	validator           messageValidator
+	preRoundTracker     *preRoundTracker
+	statusesTracker     *statusTracker
+	proposalTracker     proposalTrackerProvider
+	commitTracker       commitTrackerProvider
+	notifyTracker       *notifyTracker
+	cfg                 config.Config
+	pending             map[string]*Msg // buffer for early messages that are pending process
+	notifySent          bool            // flag to set in case a notification had already been sent by this instance
+	mTracker            *msgsTracker    // tracks valid messages
+	terminating         bool
+	shouldCertify       bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
+	storedCertificate   bool
 }
 
 // newConsensusProcess creates a new consensus process instance.
 func newConsensusProcess(cfg config.Config, instanceID instanceID, s *Set, oracle Rolacle, stateQuerier StateQuerier,
 	layersPerEpoch uint16, signing Signer, nid types.NodeID, p2p NetworkService,
-	terminationReport chan TerminationOutput, ev roleValidator, logger log.Log) *consensusProcess {
+	terminationReport chan TerminationOutput, certificationReport chan CertificationOutput, ev roleValidator, logger log.Log) *consensusProcess {
 	msgsTracker := newMsgsTracker()
 	proc := &consensusProcess{
-		State:             State{-1, -1, s.Clone(), nil},
-		Closer:            NewCloser(),
-		instanceID:        instanceID,
-		oracle:            oracle,
-		signing:           signing,
-		nid:               nid,
-		network:           p2p,
-		preRoundTracker:   newPreRoundTracker(cfg.F+1, cfg.N, logger),
-		notifyTracker:     newNotifyTracker(cfg.N),
-		cfg:               cfg,
-		terminationReport: terminationReport,
-		pending:           make(map[string]*Msg, cfg.N),
-		Log:               logger,
-		mTracker:          msgsTracker,
-		shouldCertify:     false,
+		State:               State{-1, -1, s.Clone(), nil},
+		Closer:              NewCloser(),
+		instanceID:          instanceID,
+		oracle:              oracle,
+		signing:             signing,
+		nid:                 nid,
+		network:             p2p,
+		preRoundTracker:     newPreRoundTracker(cfg.F+1, cfg.N, logger),
+		notifyTracker:       newNotifyTracker(cfg.N),
+		cfg:                 cfg,
+		terminationReport:   terminationReport,
+		certificationReport: certificationReport,
+		pending:             make(map[string]*Msg, cfg.N),
+		Log:                 logger,
+		mTracker:            msgsTracker,
+		shouldCertify:       false,
+		storedCertificate:   false,
 	}
 	proc.validator = newSyntaxContextValidator(signing, cfg.F+1, proc.statusValidator(), stateQuerier, layersPerEpoch, ev, msgsTracker, logger)
 
@@ -783,24 +804,24 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 
 	// enough notifications, should terminate
 	proc.s = s // update to the agreed set
-	// should send out a Hare termination message
 
+	//should store the certificate
+	certifyCert := proc.notifyTracker.BuildCertificate(proc.s)
+	if !proc.storedCertificate {
+		proc.reportCertificate(certifyCert)
+	}
+	// should send out a Hare termination message if its a certifier
 	if proc.shouldCertify {
 		builder, err := proc.initDefaultBuilder(proc.s)
 		if err != nil {
 			proc.With().Error("init default builder failed", log.Err(err))
 			return
 		}
-		certifyCert := proc.notifyTracker.BuildCertificate(proc.s)
 		builder = builder.SetType(certification).SetCertificate(certifyCert).Sign(proc.signing)
 		//certifyMsg := builder.Build()
 		//proc.sendMessage(ctx, certifyMsg)
 	}
 
-	//check if the process already received a hare certification message and thus terminated
-	if proc.terminating {
-		return
-	}
 	proc.WithContext(ctx).Event().Info("consensus process terminated",
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
@@ -815,6 +836,8 @@ func (proc *consensusProcess) processCertificationMessage(ctx context.Context, m
 	// we know that the certification message has been validated
 	proc.s = NewSet(msg.InnerMsg.Values)
 
+	// build a certificate tracker class that keeps track of the certificates, and the sets that they certify
+
 	proc.WithContext(ctx).Event().Info("received certification message",
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
@@ -822,6 +845,8 @@ func (proc *consensusProcess) processCertificationMessage(ctx context.Context, m
 		log.Int("set_size", proc.s.Size()))
 
 	//store the message into the meshdb
+	proc.reportCertificate(msg.InnerMsg.Cert)
+	proc.storedCertificate = true
 }
 
 func (proc *consensusProcess) currentRound() int {

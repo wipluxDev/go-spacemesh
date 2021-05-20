@@ -1,21 +1,24 @@
 package hare
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/spacemeshos/go-spacemesh/common/types"
-	"github.com/spacemeshos/go-spacemesh/hare/config"
-	"github.com/spacemeshos/go-spacemesh/log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/spacemeshos/go-spacemesh/common/types"
+	"github.com/spacemeshos/go-spacemesh/hare/config"
+	"github.com/spacemeshos/go-spacemesh/log"
 )
 
 // LayerBuffer is the number of layer results we keep at a given time.
 const LayerBuffer = 20
 
-type consensusFactory func(cfg config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, terminationReport chan TerminationOutput) Consensus
+type consensusFactory func(cfg config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, terminationReport chan TerminationOutput,
+	certificationReport chan CertificationOutput) Consensus
 
 // Consensus represents an item that acts like a consensus process.
 type Consensus interface {
@@ -34,6 +37,11 @@ type TerminationOutput interface {
 	Completed() bool
 }
 
+type CertificationOutput interface {
+	ID() instanceID
+	Certificate() *certificate
+}
+
 type layers interface {
 	LayerBlockIds(layerID types.LayerID) ([]types.BlockID, error)
 	HandleValidatedLayer(ctx context.Context, validatedLayer types.LayerID, layer []types.BlockID)
@@ -41,6 +49,11 @@ type layers interface {
 
 // checks if the collected output is valid
 type outputValidationFunc func(blocks []types.BlockID) bool
+
+type CertificateAndLayer struct {
+	certificate *certificate
+	id          instanceID
+}
 
 // Hare is the orchestrator that starts new consensus processes and collects their output.
 type Hare struct {
@@ -76,6 +89,11 @@ type Hare struct {
 	nid types.NodeID
 
 	totalCPs int32
+
+	certificates    *list.List
+	certificateChan chan CertificationOutput
+
+	hdist int
 }
 
 // New returns a new Hare struct.
@@ -111,13 +129,19 @@ func New(conf config.Config, p2p NetworkService, sign Signer, nid types.NodeID, 
 	h.outputChan = make(chan TerminationOutput, h.bufferSize)
 	h.outputs = make(map[types.LayerID][]types.BlockID, h.bufferSize) //  we keep results about LayerBuffer past layers
 
-	h.factory = func(conf config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, terminationReport chan TerminationOutput) Consensus {
-		return newConsensusProcess(conf, instanceId, s, oracle, stateQ, layersPerEpoch, signing, nid, p2p, terminationReport, ev, logger)
+	h.factory = func(conf config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, terminationReport chan TerminationOutput,
+		certificationReport chan CertificationOutput) Consensus {
+		return newConsensusProcess(conf, instanceId, s, oracle, stateQ, layersPerEpoch, signing, nid, p2p, terminationReport, certificationReport, ev, logger)
 	}
 
 	h.validate = validate
 
 	h.nid = nid
+
+	h.certificates = list.New()
+	h.certificateChan = make(chan CertificationOutput, h.bufferSize)
+
+	h.hdist = 5
 
 	return h
 }
@@ -257,7 +281,7 @@ func (h *Hare) onTick(ctx context.Context, id types.LayerID) {
 		logger.With().Warning("could not register consensus process on broker", log.Err(err))
 		return
 	}
-	cp := h.factory(h.config, instID, set, h.rolacle, h.sign, h.network, h.outputChan)
+	cp := h.factory(h.config, instID, set, h.rolacle, h.sign, h.network, h.outputChan, h.certificateChan)
 	cp.SetInbox(c)
 	if err := cp.Start(ctx); err != nil {
 		logger.With().Error("could not start consensus process", log.Err(err))
@@ -315,6 +339,30 @@ func (h *Hare) outputCollectionLoop(ctx context.Context) {
 	}
 }
 
+//listens to certificates being sent from the consensus process
+func (h *Hare) certificateCollectionLoop(ctx context.Context) {
+	for {
+		select {
+		case out := <-h.certificateChan:
+			certAndL := &CertificateAndLayer{
+				certificate: out.Certificate(),
+				id:          out.ID(),
+			}
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if h.certificates.Len() >= h.hdist {
+				//delete the head
+				h.certificates.Remove(h.certificates.Front())
+				h.certificates.PushBack(certAndL)
+			} else {
+				h.certificates.PushBack(certAndL)
+			}
+		case <-h.CloseChannel():
+			return
+		}
+	}
+}
+
 // listens to new layers.
 func (h *Hare) tickLoop(ctx context.Context) {
 	for {
@@ -335,6 +383,7 @@ func (h *Hare) Start(ctx context.Context) error {
 	ctxBroker := log.WithNewSessionID(ctx, log.String("protocol", protoName+"_broker"))
 	ctxTickLoop := log.WithNewSessionID(ctx, log.String("protocol", protoName+"_tickloop"))
 	ctxOutputLoop := log.WithNewSessionID(ctx, log.String("protocol", protoName+"_outputloop"))
+	ctxCertificateLoop := log.WithNewSessionID(ctx, log.String("protocol", protoName+"_certificationloop"))
 
 	if err := h.broker.Start(ctxBroker); err != nil {
 		return err
@@ -342,6 +391,7 @@ func (h *Hare) Start(ctx context.Context) error {
 
 	go h.tickLoop(ctxTickLoop)
 	go h.outputCollectionLoop(ctxOutputLoop)
+	go h.certificateCollectionLoop(ctxCertificateLoop)
 
 	return nil
 }

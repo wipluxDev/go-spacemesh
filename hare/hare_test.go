@@ -3,6 +3,11 @@ package hare
 import (
 	"bytes"
 	"context"
+	"sort"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
@@ -12,10 +17,6 @@ import (
 	signing2 "github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sort"
-	"sync"
-	"testing"
-	"time"
 )
 
 func validateBlocks([]types.BlockID) bool {
@@ -41,10 +42,11 @@ func (m mockReport) Completed() bool {
 
 type mockConsensusProcess struct {
 	Closer
-	t    chan TerminationOutput
-	id   instanceID
-	term chan struct{}
-	set  *Set
+	t     chan TerminationOutput
+	certs chan CertificationOutput
+	id    instanceID
+	term  chan struct{}
+	set   *Set
 }
 
 func (mcp *mockConsensusProcess) Start(ctx context.Context) error {
@@ -71,11 +73,13 @@ func (mip *mockIDProvider) GetIdentity(edID string) (types.NodeID, error) {
 	return types.NodeID{Key: edID, VRFPublicKey: []byte{}}, mip.err
 }
 
-func newMockConsensusProcess(cfg config.Config, instanceID instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, outputChan chan TerminationOutput) *mockConsensusProcess {
+func newMockConsensusProcess(cfg config.Config, instanceID instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, outputChan chan TerminationOutput,
+	certChan chan CertificationOutput) *mockConsensusProcess {
 	mcp := new(mockConsensusProcess)
 	mcp.Closer = NewCloser()
 	mcp.id = instanceID
 	mcp.t = outputChan
+	mcp.certs = certChan
 	mcp.set = s
 	return mcp
 }
@@ -147,8 +151,9 @@ func TestHare_GetResult2(t *testing.T) {
 
 	h.networkDelta = 0
 
-	h.factory = func(cfg config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, outputChan chan TerminationOutput) Consensus {
-		return newMockConsensusProcess(cfg, instanceId, s, oracle, signing, p2p, outputChan)
+	h.factory = func(cfg config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, outputChan chan TerminationOutput,
+		certChan chan CertificationOutput) Consensus {
+		return newMockConsensusProcess(cfg, instanceId, s, oracle, signing, p2p, outputChan, certChan)
 	}
 
 	h.Start(context.TODO())
@@ -288,8 +293,9 @@ func TestHare_onTick(t *testing.T) {
 	createdChan := make(chan struct{})
 
 	var nmcp *mockConsensusProcess
-	h.factory = func(cfg config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, outputChan chan TerminationOutput) Consensus {
-		nmcp = newMockConsensusProcess(cfg, instanceId, s, oracle, signing, p2p, outputChan)
+	h.factory = func(cfg config.Config, instanceId instanceID, s *Set, oracle Rolacle, signing Signer, p2p NetworkService, outputChan chan TerminationOutput,
+		certChan chan CertificationOutput) Consensus {
+		nmcp = newMockConsensusProcess(cfg, instanceId, s, oracle, signing, p2p, outputChan, certChan)
 		createdChan <- struct{}{}
 		return nmcp
 	}

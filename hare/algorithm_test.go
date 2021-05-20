@@ -3,6 +3,9 @@ package hare
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/eligibility"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
@@ -13,8 +16,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 var cfg = config.Config{N: 10, F: 5, RoundDuration: 2, ExpectedLeaders: 5, LimitIterations: 1000, LimitConcurrent: 1000}
@@ -281,8 +282,10 @@ func generateConsensusProcess(t *testing.T) *consensusProcess {
 	assert.NoError(t, err)
 	oracle.Register(true, edPubkey.String())
 	output := make(chan TerminationOutput, 1)
+	certOutput := make(chan CertificationOutput, 1)
 
-	return newConsensusProcess(cfg, instanceID1, s, oracle, NewMockStateQuerier(), 10, edSigner, types.NodeID{Key: edPubkey.String(), VRFPublicKey: vrfPub}, n1, output, truer{}, log.NewDefault(edPubkey.String()))
+	return newConsensusProcess(cfg, instanceID1, s, oracle, NewMockStateQuerier(), 10, edSigner, types.NodeID{Key: edPubkey.String(), VRFPublicKey: vrfPub}, n1, output,
+		certOutput, truer{}, log.NewDefault(edPubkey.String()))
 }
 
 func TestConsensusProcess_Id(t *testing.T) {
