@@ -34,7 +34,7 @@ func TestMessageValidator_CommitStatus(t *testing.T) {
 func TestMessageValidator_ValidateCertificate(t *testing.T) {
 	validator := defaultValidator()
 	assert.False(t, validator.validateCertificate(context.TODO(), nil))
-	cert := &certificate{}
+	cert := &Certificate{}
 	assert.False(t, validator.validateCertificate(context.TODO(), cert))
 	cert.AggMsgs = &aggregatedMessages{}
 	assert.False(t, validator.validateCertificate(context.TODO(), cert))
@@ -58,8 +58,8 @@ func TestMessageValidator_ValidateCertificate(t *testing.T) {
 func TestMessageValidator_ValidateTerminationCertificate(t *testing.T) {
 	validator := defaultValidator()
 	assert.False(t, validator.validateTerminationCertificate(context.TODO(), nil))
-	cert := &certificate{}
-	terminationCert := &certificate{}
+	cert := &Certificate{}
+	terminationCert := &Certificate{}
 	assert.False(t, validator.validateTerminationCertificate(context.TODO(), terminationCert))
 	cert.AggMsgs = &aggregatedMessages{}
 	terminationCert.AggMsgs = &aggregatedMessages{}

@@ -40,7 +40,7 @@ type TerminationOutput interface {
 // CertificationOutput represents a certificate received
 type CertificationOutput interface {
 	ID() instanceID
-	Certificate() *certificate
+	Certificate() *Certificate
 }
 
 type layers interface {
@@ -52,7 +52,7 @@ type layers interface {
 type outputValidationFunc func(blocks []types.BlockID) bool
 
 type certificateAndLayer struct {
-	certificate *certificate
+	certificate *Certificate
 	id          instanceID
 }
 
@@ -319,7 +319,7 @@ func (h *Hare) GetResult(lid types.LayerID) ([]types.BlockID, error) {
 }
 
 // GetCertificate returns the certificate corresponding to a particular layerID
-func (h *Hare) GetCertificate(lid types.LayerID) *certificate {
+func (h *Hare) GetCertificate(lid types.LayerID) *Certificate {
 	h.certLock.RLock()
 	defer h.certLock.RUnlock()
 	//check if the layer falls within

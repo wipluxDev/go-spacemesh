@@ -57,14 +57,14 @@ const (
 
 type certificateReport struct {
 	id          instanceID
-	certificate *certificate
+	certificate *Certificate
 }
 
 func (cr certificateReport) ID() instanceID {
 	return cr.id
 }
 
-func (cr certificateReport) Certificate() *certificate {
+func (cr certificateReport) Certificate() *Certificate {
 	return cr.certificate
 }
 
@@ -92,7 +92,7 @@ func (proc *consensusProcess) report(completed bool) {
 	proc.terminationReport <- procReport{proc.instanceID, proc.s, completed}
 }
 
-func (proc *consensusProcess) reportCertificate(cert *certificate) {
+func (proc *consensusProcess) reportCertificate(cert *Certificate) {
 	proc.certificationReport <- certificateReport{proc.instanceID, cert}
 }
 
@@ -103,7 +103,7 @@ type State struct {
 	k           int32        // the round counter (k%4 is the round number)
 	ki          int32        // indicates when S was first committed upon
 	s           *Set         // the set of values
-	certificate *certificate // the certificate
+	certificate *Certificate // the certificate
 }
 
 // StateQuerier provides a query to check if an Ed public key is active on the current consensus view.

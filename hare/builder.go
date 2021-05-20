@@ -46,7 +46,7 @@ func (m *Message) Field() log.Field {
 
 // certificate is a collection of messages and the set of values.
 // Typically used as a collection of commit messages.
-type certificate struct {
+type Certificate struct {
 	Values  []types.BlockID // the committed set S
 	AggMsgs *aggregatedMessages
 }
@@ -66,7 +66,7 @@ type innerMessage struct {
 	Values     []types.BlockID     // the set S. optional for commit InnerMsg in a certificate
 	RoleProof  []byte              // role is implicit by InnerMsg type, this is the proof
 	Svp        *aggregatedMessages // optional. only for proposal Messages
-	Cert       *certificate        // optional
+	Cert       *Certificate        // optional
 }
 
 // Bytes returns the message as bytes.
@@ -105,7 +105,7 @@ func (builder *messageBuilder) Build() *Msg {
 	return builder.msg
 }
 
-func (builder *messageBuilder) SetCertificate(certificate *certificate) *messageBuilder {
+func (builder *messageBuilder) SetCertificate(certificate *Certificate) *messageBuilder {
 	builder.msg.InnerMsg.Cert = certificate
 	return builder
 }

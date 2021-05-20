@@ -418,7 +418,7 @@ func (v *syntaxContextValidator) validateSVP(ctx context.Context, msg *Msg) bool
 	return true
 }
 
-func (v *syntaxContextValidator) validateCertificate(ctx context.Context, cert *certificate) bool {
+func (v *syntaxContextValidator) validateCertificate(ctx context.Context, cert *Certificate) bool {
 	logger := v.WithContext(ctx)
 
 	defer func(startTime time.Time) {
@@ -466,7 +466,7 @@ func validateStatusType(m *Msg) bool {
 	return messageType(m.InnerMsg.Type) == status
 }
 
-func (v *syntaxContextValidator) validateTerminationCertificate(ctx context.Context, cert *certificate) bool {
+func (v *syntaxContextValidator) validateTerminationCertificate(ctx context.Context, cert *Certificate) bool {
 	logger := v.WithContext(ctx)
 
 	defer func(startTime time.Time) {

@@ -86,9 +86,9 @@ func (nt *notifyTracker) HasCertificate(k int32, set *Set) bool {
 }
 
 // BuildCertificate builds a certificate of all the notify messages to send as part of the termination certification
-func (nt *notifyTracker) BuildCertificate(s *Set) *certificate {
+func (nt *notifyTracker) BuildCertificate(s *Set) *Certificate {
 	// assume for now that you'll always be able to make a valid certificate
-	c := &certificate{}
+	c := &Certificate{}
 	c.Values = s.ToSlice()
 	c.AggMsgs = &aggregatedMessages{}
 	c.AggMsgs.Messages = nt.notificationMessages[s.ID()]
