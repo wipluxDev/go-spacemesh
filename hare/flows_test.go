@@ -3,6 +3,10 @@ package hare
 import (
 	"context"
 	"errors"
+	"math/rand"
+	"testing"
+	"time"
+
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/hare/config"
 	"github.com/spacemeshos/go-spacemesh/log"
@@ -10,9 +14,6 @@ import (
 	"github.com/spacemeshos/go-spacemesh/priorityq"
 	"github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/stretchr/testify/require"
-	"math/rand"
-	"testing"
-	"time"
 )
 
 type HareWrapper struct {
@@ -274,6 +275,7 @@ func Test_multipleCPs(t *testing.T) {
 
 // Test - run multiple CPs where one of them runs more than one iteration
 func Test_multipleCPsAndIterations(t *testing.T) {
+	types.SetLayersPerEpoch(4)
 	r := require.New(t)
 	totalCp := 4
 	test := newHareWrapper(totalCp)

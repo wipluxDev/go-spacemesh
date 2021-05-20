@@ -318,6 +318,20 @@ func (h *Hare) GetResult(lid types.LayerID) ([]types.BlockID, error) {
 	return blks, nil
 }
 
+// GetCertificate returns the certificate corresponding to a particular layerID
+func (h *Hare) GetCertificate(lid types.LayerID) *certificate {
+	h.certLock.RLock()
+	defer h.certLock.RUnlock()
+	//check if the layer falls within
+	for e := h.certificates.Front(); e != nil; e = e.Next() {
+		val := e.Value.(certificateAndLayer)
+		if val.id == instanceID(lid) {
+			return val.certificate
+		}
+	}
+	return nil
+}
+
 // listens to outputs arriving from consensus processes.
 func (h *Hare) outputCollectionLoop(ctx context.Context) {
 	for {
