@@ -93,6 +93,7 @@ type Hare struct {
 
 	certificates    *list.List
 	certificateChan chan CertificationOutput
+	certLock        sync.RWMutex
 
 	hdist int
 }
@@ -349,8 +350,8 @@ func (h *Hare) certificateCollectionLoop(ctx context.Context) {
 				certificate: out.Certificate(),
 				id:          out.ID(),
 			}
-			h.mu.Lock()
-			defer h.mu.Unlock()
+			h.certLock.Lock()
+			defer h.certLock.Unlock()
 			if h.certificates.Len() >= h.hdist {
 				//delete the head
 				h.certificates.Remove(h.certificates.Front())
