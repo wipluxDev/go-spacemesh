@@ -33,7 +33,8 @@ const hareEligibility int32 = -2
 
 // Rolacle is the roles oracle provider.
 type Rolacle interface {
-	Eligible(ctx context.Context, layer types.LayerID, round int32, committeeSize int, id types.NodeID, sig []byte) (bool, error)
+	Validate(ctx context.Context, layer types.LayerID, round int32, committeeSize int, id types.NodeID, sig []byte, eligibilityCount uint16) (bool, error)
+	CalcEligibility(ctx context.Context, layer types.LayerID, round int32, committeeSize int, id types.NodeID, sig []byte) (uint16, error)
 	Proof(ctx context.Context, layer types.LayerID, round int32) ([]byte, error)
 	IsIdentityActiveOnConsensusView(edID string, layer types.LayerID) (bool, error)
 }
@@ -192,29 +193,31 @@ type consensusProcess struct {
 	log.Log
 	State
 	Closer
-	instanceID           instanceID // the layer id
-	oracle               Rolacle    // the roles oracle provider
-	signing              Signer
-	nid                  types.NodeID
-	network              NetworkService
-	isStarted            bool
-	inbox                chan *Msg
-	terminationReport    chan TerminationOutput
-	certificationReport  chan CertificationOutput
-	validator            messageValidator
-	preRoundTracker      *preRoundTracker
-	statusesTracker      *statusTracker
-	proposalTracker      proposalTrackerProvider
-	commitTracker        commitTrackerProvider
-	notifyTracker        *notifyTracker
-	certficiationTracker *certficiationTracker
-	cfg                  config.Config
-	pending              map[string]*Msg // buffer for early messages that are pending process
-	notifySent           bool            // flag to set in case a notification had already been sent by this instance
-	mTracker             *msgsTracker    // tracks valid messages
-	terminating          bool
-	shouldCertify        bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
-	storedCertificate    bool
+	instanceID                    instanceID // the layer id
+	oracle                        Rolacle    // the roles oracle provider
+	signing                       Signer
+	nid                           types.NodeID
+	network                       NetworkService
+	isStarted                     bool
+	inbox                         chan *Msg
+	terminationReport             chan TerminationOutput
+	certificationReport           chan CertificationOutput
+	validator                     messageValidator
+	preRoundTracker               *preRoundTracker
+	statusesTracker               *statusTracker
+	proposalTracker               proposalTrackerProvider
+	commitTracker                 commitTrackerProvider
+	notifyTracker                 *notifyTracker
+	certficiationTracker          *certficiationTracker
+	cfg                           config.Config
+	pending                       map[string]*Msg // buffer for early messages that are pending process
+	notifySent                    bool            // flag to set in case a notification had already been sent by this instance
+	mTracker                      *msgsTracker    // tracks valid messages
+	terminating                   bool
+	shouldCertify                 bool //bool to determine whether this consensus process acts as a Hare certifier for the instance/layer
+	storedCertificate             bool
+	eligibilityCount              uint16
+	certificationEligibilityCount uint16
 }
 
 // newConsensusProcess creates a new consensus process instance.
@@ -355,7 +358,11 @@ PreRound:
 		types.LayerID(proc.instanceID),
 		log.Int("set_size", proc.s.Size()))
 	if proc.s.Size() == 0 {
-		logger.Event().Error("preround ended with empty set", types.LayerID(proc.instanceID))
+		logger.Event().Error("preround ended with empty set",
+			types.LayerID(proc.instanceID),
+			log.String("tracked_values", proc.preRoundTracker.tracker.String()),
+			log.Uint32("threshold", proc.preRoundTracker.threshold),
+		)
 	} else {
 		logger.With().Info("preround ended",
 			log.Int("set_size", proc.s.Size()),
@@ -525,10 +532,13 @@ func (proc *consensusProcess) sendMessage(ctx context.Context, msg *Msg) bool {
 
 	// generate a new requestID for this message
 	ctx = log.WithNewRequestID(ctx,
-		log.String("current_set", proc.s.String()),
+		types.LayerID(proc.instanceID),
+		log.Int32("msg_k", msg.InnerMsg.K),
 		log.String("msg_type", msg.InnerMsg.Type.String()),
+		log.Int("eligibility_count", int(msg.InnerMsg.EligibilityCount)),
+		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
-		types.LayerID(proc.instanceID))
+	)
 	logger := proc.WithContext(ctx)
 
 	if err := proc.network.Broadcast(ctx, protoName, msg.Bytes()); err != nil {
@@ -747,6 +757,7 @@ func (proc *consensusProcess) initDefaultBuilder(s *Set) (*messageBuilder, error
 		return nil, err
 	}
 	builder.SetRoleProof(proof)
+	builder.SetEligibilityCount(proc.eligibilityCount)
 
 	return builder, nil
 }
@@ -828,7 +839,7 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 		log.String("current_set", proc.s.String()),
 		log.Int32("current_k", proc.k),
 		types.LayerID(proc.instanceID),
-		log.Int("set_size", proc.s.Size()))
+		log.Int("set_size", proc.s.Size()), log.Int32("K", proc.k))
 	proc.report(completed)
 	close(proc.CloseChannel())
 	proc.terminating = true
@@ -920,13 +931,14 @@ func (proc *consensusProcess) isHareCertifier(ctx context.Context) bool {
 		proc.With().Error("could not retrieve eligibility proof from oracle", log.Err(err))
 		return false
 	}
-	res, err = proc.oracle.Eligible(ctx, types.LayerID(proc.instanceID),
+	eligibilityCount, err := proc.oracle.CalcEligibility(ctx, types.LayerID(proc.instanceID),
 		hareEligibility, expectedCommitteeSize(proc.k, proc.cfg.N, proc.cfg.ExpectedLeaders), proc.nid, proof)
+	proc.certificationEligibilityCount = eligibilityCount
 	if err != nil {
 		logger.With().Error("failed to check eligibility", log.Err(err))
 		return false
 	}
-	return res //true if eligible, false if not
+	return eligibilityCount > 0 //true if eligible, false if not
 }
 
 // checks if we should participate in the current round
@@ -948,7 +960,8 @@ func (proc *consensusProcess) shouldParticipate(ctx context.Context) bool {
 		return false
 	}
 
-	if role := proc.currentRole(ctx); role == passive {
+	currentRole := proc.currentRole(ctx)
+	if currentRole == passive {
 		logger.With().Info("should not participate: passive",
 			log.Int32("current_k", proc.k), types.LayerID(proc.instanceID))
 		return false
@@ -956,8 +969,10 @@ func (proc *consensusProcess) shouldParticipate(ctx context.Context) bool {
 
 	// should participate
 	logger.With().Info("should participate",
-		log.Int32("current_k", proc.k),
-		types.LayerID(proc.instanceID))
+		log.Int32("current_k", proc.k), types.LayerID(proc.instanceID),
+		log.Bool("leader", currentRole == leader),
+		log.Uint32("eligibility_count", uint32(proc.eligibilityCount)),
+	)
 	return true
 }
 
@@ -970,14 +985,15 @@ func (proc *consensusProcess) currentRole(ctx context.Context) role {
 		return passive
 	}
 
-	res, err := proc.oracle.Eligible(ctx, types.LayerID(proc.instanceID),
+	eligibilityCount, err := proc.oracle.CalcEligibility(ctx, types.LayerID(proc.instanceID),
 		proc.k, expectedCommitteeSize(proc.k, proc.cfg.N, proc.cfg.ExpectedLeaders), proc.nid, proof)
 	if err != nil {
-		logger.With().Error("failed to check eligibility", log.Err(err))
+		logger.With().Error("failed to check eligibility", log.Err(err), types.LayerID(proc.instanceID))
 		return passive
 	}
 
-	if res { // eligible
+	proc.eligibilityCount = eligibilityCount
+	if eligibilityCount > 0 { // eligible
 		if proc.currentRound() == proposalRound {
 			return leader
 		}

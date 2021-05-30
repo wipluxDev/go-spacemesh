@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spacemeshos/go-spacemesh/log"
 	"github.com/spacemeshos/go-spacemesh/signing"
 	"github.com/stretchr/testify/assert"
@@ -92,6 +93,7 @@ func TestMessageValidator_ValidateTerminationCertificate(t *testing.T) {
 
 func TestEligibilityValidator_validateRole(t *testing.T) {
 	oracle := &mockRolacle{}
+	types.SetLayersPerEpoch(10)
 	ev := newEligibilityValidator(oracle, 10, &mockIDProvider{}, 1, 5, log.NewDefault(""))
 	ev.oracle = oracle
 	res, err := ev.validateRole(context.TODO(), nil)
@@ -183,7 +185,7 @@ func TestMessageValidator_Aggregated(t *testing.T) {
 	agg := &aggregatedMessages{}
 	r.Equal(errNilMsgsSlice, validator.validateAggregatedMessage(context.TODO(), agg, funcs))
 
-	agg.Messages = make([]*Message, validator.threshold+1)
+	agg.Messages = makeMessages(validator.threshold - 1)
 	r.Equal(errMsgsCountMismatch, validator.validateAggregatedMessage(context.TODO(), agg, funcs))
 
 	pg, msgs, sgn := initPg(t, validator)
@@ -225,6 +227,16 @@ func TestMessageValidator_Aggregated(t *testing.T) {
 	r.Nil(pg.PublicKey(msgs[0]))
 	validator.validateAggregatedMessage(context.TODO(), agg, funcs)
 	r.NotNil(pg.PublicKey(msgs[0]))
+}
+
+func makeMessages(eligibilityCount int) []*Message {
+	return []*Message{
+		{
+			InnerMsg: &innerMessage{
+				EligibilityCount: uint16(eligibilityCount),
+			},
+		},
+	}
 }
 
 func TestSyntaxContextValidator_PreRoundContext(t *testing.T) {
