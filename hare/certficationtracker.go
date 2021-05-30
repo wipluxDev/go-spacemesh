@@ -21,9 +21,9 @@ func (ct *certficiationTracker) OnCertification(msg *Msg, certifiedSet *Set) boo
 	if _, exist := ct.certificates[pub.String()]; exist {
 		if ct.setsCertified[pub.String()].Equals(certifiedSet) {
 			return true
-		} else {
-			log.Panic("Certified sets do not match from the same pubkey")
 		}
+		log.Panic("Certified sets do not match from the same pubkey")
+
 	}
 
 	ct.certificates[pub.String()] = struct{}{}
