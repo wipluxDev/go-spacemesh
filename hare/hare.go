@@ -143,6 +143,7 @@ func New(conf config.Config, p2p NetworkService, sign Signer, nid types.NodeID, 
 	h.certificates = list.New()
 	h.certificateChan = make(chan CertificationOutput, h.bufferSize)
 
+	h.hdist = 10
 	//h.hdist = conf.Hdist
 
 	return h
