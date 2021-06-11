@@ -762,6 +762,20 @@ func (proc *consensusProcess) initDefaultBuilder(s *Set) (*messageBuilder, error
 	return builder, nil
 }
 
+func (proc *consensusProcess) initDefaultBuilderCertification(s *Set) (*messageBuilder, error) {
+	builder := newMessageBuilder().SetInstanceID(proc.instanceID)
+	builder = builder.SetRoundCounter(proc.k).SetKi(proc.ki).SetValues(s)
+	proof, err := proc.oracle.Proof(context.TODO(), types.LayerID(proc.instanceID), proc.k)
+	if err != nil {
+		proc.With().Error("could not initialize default builder", log.Err(err))
+		return nil, err
+	}
+	builder.SetRoleProof(proof)
+	builder.SetEligibilityCount(proc.certificationEligibilityCount)
+
+	return builder, nil
+}
+
 func (proc *consensusProcess) processPreRoundMsg(ctx context.Context, msg *Msg) {
 	proc.preRoundTracker.OnPreRound(ctx, msg)
 }
@@ -825,14 +839,14 @@ func (proc *consensusProcess) processNotifyMsg(ctx context.Context, msg *Msg) {
 	}
 	// should send out a Hare termination message if its a certifier
 	if proc.shouldCertify {
-		builder, err := proc.initDefaultBuilder(proc.s)
+		builder, err := proc.initDefaultBuilderCertification(proc.s)
 		if err != nil {
 			proc.With().Error("init default builder failed", log.Err(err))
 			return
 		}
 		builder = builder.SetType(certification).SetCertificate(certifyCert).Sign(proc.signing)
-		//certifyMsg := builder.Build()
-		//proc.sendMessage(ctx, certifyMsg)
+		certifyMsg := builder.Build()
+		proc.sendMessage(ctx, certifyMsg)
 	}
 
 	proc.WithContext(ctx).Event().Info("consensus process terminated",
