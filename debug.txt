@@ -1,0 +1,1 @@
+ok  	github.com/spacemeshos/go-spacemesh/hare	14.013s
