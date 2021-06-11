@@ -47,6 +47,8 @@ func (mType messageType) String() string {
 		return "Notify"
 	case pre:
 		return "PreRound"
+	case certification:
+		return "Certification"
 	default:
 		return "Unknown message type"
 	}
