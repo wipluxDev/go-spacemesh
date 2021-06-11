@@ -11,7 +11,7 @@ type certficiationTracker struct {
 func newCertificationTracker(expectedSize int) *certficiationTracker {
 	ct := &certficiationTracker{}
 	ct.certificates = make(map[string]struct{}, expectedSize)
-
+	ct.setsCertified = make(map[string]*Set, expectedSize)
 	return ct
 }
 
