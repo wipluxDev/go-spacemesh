@@ -8,6 +8,8 @@ import (
 	"github.com/spacemeshos/go-spacemesh/log"
 )
 
+// CertificateHare is a struct for testing which simply subscribes to gossip and
+// listens for the certification messages, but doesn't participate in the hare
 type CertificateHare struct {
 	Closer
 	log.Log
@@ -25,6 +27,7 @@ type CertificateHare struct {
 	nid types.NodeID
 }
 
+//NewCertificateHare creates a new CertificateHare struct
 func NewCertificateHare(conf config.Config, p2p NetworkService, validate outputValidationFunc, beginLayer chan types.LayerID, logger log.Log,
 	nid types.NodeID) *CertificateHare {
 	h := new(CertificateHare)
@@ -44,6 +47,7 @@ func NewCertificateHare(conf config.Config, p2p NetworkService, validate outputV
 	return h
 }
 
+// OutputLoop checks for the output from the Gossip protocol
 func (ch *CertificateHare) OutputLoop(ctx context.Context) {
 	// for {
 	// 	select {
@@ -57,6 +61,7 @@ func (ch *CertificateHare) OutputLoop(ctx context.Context) {
 	// }
 }
 
+// Start starts the output collection loop
 func (ch *CertificateHare) Start(ctx context.Context) error {
 	ch.WithContext(ctx).With().Info("starting protocol", log.String("protocol", "HARE_CERTIFICATE_PROTOCOL"))
 
