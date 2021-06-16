@@ -111,7 +111,7 @@ func New(conf config.Config, p2p NetworkService, sign Signer, nid types.NodeID, 
 		layerTime := layerClock.LayerToTime(layerID)
 		wakeupDelta := time.Duration(conf.WakeupDelta) * time.Second
 		roundDuration := time.Duration(h.config.RoundDuration) * time.Second
-		h.With().Info("creating hare round clock",
+		h.With().Info("creating hare round clock", layerID,
 			log.String("layer_time", layerTime.String()),
 			log.Duration("wakeup_delta", wakeupDelta),
 			log.Duration("round_duration", roundDuration))

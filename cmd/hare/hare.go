@@ -173,7 +173,7 @@ func (app *HareApp) Start(cmd *cobra.Command, args []string) {
 	}
 	mockClock := &mockClock{
 		ch:        make(chan struct{}),
-		layerTime: time.Now(),
+		layerTime: gTime,
 	}
 	hareI := hare.New(app.Config.HARE, app.p2p, app.sgn, types.NodeID{Key: app.sgn.PublicKey().String(), VRFPublicKey: []byte{}}, validateBlocks, IsSynced, &mockBlockProvider{}, hareOracle, uint16(app.Config.LayersPerEpoch), &mockIDProvider{}, &mockStateQuerier{}, mockClock, lg)
 	log.Info("starting hare service")
