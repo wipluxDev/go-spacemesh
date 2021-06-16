@@ -312,7 +312,7 @@ type SharedRoundClock struct {
 	m                sync.Mutex
 }
 
-func NewSharedClock(minCount int, totalCP int, processingDelay time.Duration) map[instanceID]*SharedRoundClock {
+func newSharedClock(minCount int, totalCP int, processingDelay time.Duration) map[instanceID]*SharedRoundClock {
 	m := make(map[instanceID]*SharedRoundClock)
 	for i := types.GetEffectiveGenesis() + 1; i <= types.GetEffectiveGenesis()+types.LayerID(totalCP); i++ {
 		m[instanceID(i)] = &SharedRoundClock{
@@ -420,7 +420,7 @@ func Test_multipleCPs(t *testing.T) {
 	sim := service.NewSimulator()
 	test.initialSets = make([]*Set, totalNodes)
 	oracle := &trueOracle{}
-	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(50*totalCp*totalNodes)*time.Millisecond)
+	scMap := newSharedClock(totalNodes, totalCp, time.Duration(50*totalCp*totalNodes)*time.Millisecond)
 	for i := 0; i < totalNodes; i++ {
 		s := sim.NewNode()
 		src := NewSimRoundClock(s, scMap)
@@ -452,7 +452,7 @@ func Test_multipleCPsAndIterations(t *testing.T) {
 	sim := service.NewSimulator()
 	test.initialSets = make([]*Set, totalNodes)
 	oracle := &trueOracle{}
-	scMap := NewSharedClock(totalNodes, totalCp, time.Duration(50*totalCp*totalNodes)*time.Millisecond)
+	scMap := newSharedClock(totalNodes, totalCp, time.Duration(50*totalCp*totalNodes)*time.Millisecond)
 	for i := 0; i < totalNodes; i++ {
 		s := sim.NewNode()
 		mp2p := &p2pManipulator{nd: s, stalledLayer: 1, err: errors.New("fake err")}

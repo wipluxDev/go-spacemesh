@@ -42,9 +42,18 @@ type layers interface {
 // checks if the collected output is valid
 type outputValidationFunc func(blocks []types.BlockID) bool
 
+// RoundClock provides timers that allow waiting for Hare wakeup and the end of each Hare round.
 type RoundClock interface {
 	AwaitWakeup() <-chan struct{}
 	AwaitEndOfRound(round int32) <-chan struct{}
+}
+
+// LayerClock provides a timer for the start of a given layer, as well as the current layer and allows converting a
+// layer number to a clock time.
+type LayerClock interface {
+	LayerToTime(id types.LayerID) time.Time
+	AwaitLayer(layerID types.LayerID) chan struct{}
+	GetCurrentLayer() types.LayerID
 }
 
 // Hare is the orchestrator that starts new consensus processes and collects their output.
@@ -81,12 +90,6 @@ type Hare struct {
 	nid types.NodeID
 
 	totalCPs int32
-}
-
-type LayerClock interface {
-	LayerToTime(id types.LayerID) time.Time
-	AwaitLayer(layerID types.LayerID) chan struct{}
-	GetCurrentLayer() types.LayerID
 }
 
 // New returns a new Hare struct.
