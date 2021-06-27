@@ -75,7 +75,7 @@ type Logic struct {
 	fetcher              fetch.Fetcher
 	net                  network
 	layerHashResults     map[types.LayerID]map[p2ppeers.Peer]*types.Hash32
-	blockHashResults     map[types.LayerID][]bool //list of results from peers - true if blocks were received
+	blockHashResults     map[types.LayerID][]bool // list of results from peers - true if blocks were received
 	layerResultsChannels map[types.LayerID][]chan LayerPromiseResult
 	poetProofs           poetDb
 	atxs                 atxHandler
@@ -206,7 +206,7 @@ func (l *Logic) LayerHashBlocksReceiver(ctx context.Context, msg []byte) []byte 
 		// TODO: We need to diff empty set and no results in sync somehow.
 		l.log.Error("didn't have input vector for layer ")
 	}
-	//latest := l.gossipBlocks.Get() todo: implement this
+	// latest := l.gossipBlocks.Get() todo: implement this
 	b := layerBlocks{
 		blocks,
 		nil,
@@ -293,11 +293,11 @@ func (l *Logic) receiveLayerHash(ctx context.Context, id types.LayerID, p p2ppee
 	l.log.Info("got hashes for layer, now aggregating")
 	l.layerHashResM.Unlock()
 	errors := 0
-	//aggregate hashes so that same hash will not be requested several times
+	// aggregate hashes so that same hash will not be requested several times
 	hashes := make(map[types.Hash32][]p2ppeers.Peer)
 	l.layerHashResM.RLock()
 	for peer, hash := range l.layerHashResults[id] {
-		//count nil hashes - mark errors.
+		// count nil hashes - mark errors.
 		if hash == nil {
 			errors++
 		} else {
@@ -309,7 +309,7 @@ func (l *Logic) receiveLayerHash(ctx context.Context, id types.LayerID, p p2ppee
 	}
 	l.layerHashResM.RUnlock()
 
-	//delete the receiver since we got all the needed messages
+	// delete the receiver since we got all the needed messages
 	l.layerHashResM.Lock()
 	delete(l.layerHashResults, id)
 	l.layerHashResM.Unlock()
@@ -326,13 +326,13 @@ func (l *Logic) receiveLayerHash(ctx context.Context, id types.LayerID, p p2ppee
 
 	// send a request to get blocks from a single peer if multiple peers declare same hash per layer
 	// if the peers fails to respond request will be sen to next peer in line
-	//todo: think if we should aggregate or ask from multiple peers to have some redundancy in requests
+	// todo: think if we should aggregate or ask from multiple peers to have some redundancy in requests
 	for hash, peer := range hashes {
 		if hash == emptyHash {
 			l.receiveBlockHashes(ctx, id, nil, len(hashes), ErrZeroLayer)
 			continue
 		}
-		//build receiver function
+		// build receiver function
 		receiveForPeerFunc := func(data []byte) {
 			l.receiveBlockHashes(ctx, id, data, len(hashes), nil)
 		}
@@ -381,7 +381,7 @@ func (l *Logic) notifyLayerPromiseResult(id types.LayerID, expectedResults int, 
 	}
 	l.layerResM.Lock()
 	for _, ch := range l.layerResultsChannels[id] {
-		//l.log.Info("writing res for layer %v err %v", id, err)
+		// l.log.Info("writing res for layer %v err %v", id, err)
 		ch <- res
 	}
 	delete(l.layerResultsChannels, id)
@@ -390,9 +390,10 @@ func (l *Logic) notifyLayerPromiseResult(id types.LayerID, expectedResults int, 
 
 // receiveBlockHashes is called when receiving block hashes for specified layer layer from remote peer
 func (l *Logic) receiveBlockHashes(ctx context.Context, layer types.LayerID, data []byte, expectedResults int, extErr error) {
-	//if we failed getting layer data - notify
+	logger := l.log.WithFields(layer)
+	// if we failed getting layer data - notify
 	if extErr != nil {
-		l.log.Error("received error for layer id %v", extErr)
+		logger.With().Error("receiveBlockHashes got external error", log.Err(extErr))
 		l.notifyLayerPromiseResult(layer, expectedResults, extErr)
 		return
 	}
@@ -401,7 +402,7 @@ func (l *Logic) receiveBlockHashes(ctx context.Context, layer types.LayerID, dat
 		var blocks layerBlocks
 		err := types.BytesToInterface(data, &blocks)
 		if err != nil {
-			l.log.Error("received error for layer id %v", err)
+			logger.With().Error("receiveBlockHashes failed to unmarshal blocks", log.Err(err))
 			l.notifyLayerPromiseResult(layer, expectedResults, err)
 			return
 		}
@@ -410,12 +411,12 @@ func (l *Logic) receiveBlockHashes(ctx context.Context, layer types.LayerID, dat
 		retErr := l.GetBlocks(ctx, blocks.Blocks)
 		// if there is an error this means that the entire layer cannot be validated and therefore sync should fail
 		if retErr != nil {
-			l.log.With().Error("received error for layer id", log.Err(retErr))
+			logger.With().Error("receiveBlockHashes failed to get blocks", log.Err(retErr))
 		}
 
 		ivErr := l.GetInputVector(layer)
 		if ivErr != nil {
-			l.log.With().Error("received error for inputvecor of layer", log.Err(ivErr))
+			logger.With().Error("receiveBlockHashes failed to get input vector", log.Err(ivErr))
 		}
 	}
 
@@ -432,7 +433,7 @@ type epochAtxRes struct {
 func (l *Logic) GetEpochATXs(ctx context.Context, id types.EpochID) error {
 	resCh := make(chan epochAtxRes, 1)
 
-	//build receiver function
+	// build receiver function
 	receiveForPeerFunc := func(data []byte) {
 		var atxsIDs []types.ATXID
 		err := types.BytesToInterface(data, &atxsIDs)
@@ -482,13 +483,13 @@ func (l *Logic) blockReceiveFunc(ctx context.Context, data []byte) error {
 
 // IsSynced indocates if this node is synced
 func (l *Logic) IsSynced(context.Context) bool {
-	//todo: add this logic
+	// todo: add this logic
 	return true
 }
 
 // ListenToGossip indicates if node is currently accepting packets from gossip
 func (l *Logic) ListenToGossip() bool {
-	//todo: add this logic
+	// todo: add this logic
 	return true
 }
 
@@ -541,7 +542,7 @@ func (l *Logic) GetAtxs(ctx context.Context, IDs []types.ATXID) error {
 	for _, atxID := range IDs {
 		hashes = append(hashes, atxID.Hash32())
 	}
-	//todo: atx Id is currently only the header bytes - should we change it?
+	// todo: atx Id is currently only the header bytes - should we change it?
 	results := l.fetcher.GetHashes(hashes, ATXDB, false)
 	for hash, resC := range results {
 		res := <-resC
