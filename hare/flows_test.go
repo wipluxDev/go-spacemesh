@@ -228,6 +228,9 @@ func (mbp *mockBlockProvider) LayerBlockIds(types.LayerID) ([]types.BlockID, err
 	return buildSet(), nil
 }
 
+func (mbp *mockBlockProvider) RecordCoinflip(ctx context.Context, layerID types.LayerID, coinflip bool) {
+}
+
 func createMaatuf(tcfg config.Config, clock *mockClock, p2p NetworkService, rolacle Rolacle, name string) *Hare {
 	ed := signing.NewEdSigner()
 	pub := ed.PublicKey()

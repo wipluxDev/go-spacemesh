@@ -32,7 +32,7 @@ func TestStatusTracker_RecordStatus(t *testing.T) {
 	assert.False(t, tracker.IsSVPReady())
 
 	for i := 0; i < lowThresh10; i++ {
-		tracker.RecordStatus(context.TODO(), BuildPreRoundMsg(generateSigning(), s))
+		tracker.RecordStatus(context.TODO(), BuildPreRoundMsg(generateSigning(), s, nil))
 		assert.False(t, tracker.IsSVPReady())
 	}
 
