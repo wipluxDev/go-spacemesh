@@ -442,17 +442,6 @@ func (m *DB) getLayerHashKey(layerID types.LayerID) []byte {
 	return []byte(fmt.Sprintf("layerHash_%v", layerID.Bytes()))
 }
 
-// GetLayerHash returns layer hash for received blocks
-func (msh *Mesh) GetLayerHash(layerID types.LayerID) types.Hash32 {
-	h := types.Hash32{}
-	bts, err := msh.general.Get(msh.getLayerHashKey(layerID))
-	if err != nil {
-		return types.Hash32{}
-	}
-	h.SetBytes(bts)
-	return h
-}
-
 func (m *DB) persistLayerHash(layerID types.LayerID, hash types.Hash32) {
 	if err := m.general.Put(m.getLayerHashKey(layerID), hash.Bytes()); err != nil {
 		m.With().Error("failed to persist layer hash", log.Err(err), layerID,

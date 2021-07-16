@@ -238,6 +238,26 @@ func (msh *Mesh) GetLayer(i types.LayerID) (*types.Layer, error) {
 	return l, nil
 }
 
+// GetLayerHash returns layer hash for received blocks
+func (msh *Mesh) GetLayerHash(layerID types.LayerID) types.Hash32 {
+	h := types.Hash32{}
+	bts, err := msh.general.Get(msh.getLayerHashKey(layerID))
+	if err != nil {
+		return types.Hash32{}
+	}
+	h.SetBytes(bts)
+	return h
+}
+
+// GetAccLayerHash returns the accumulated hash of all layers up to the given layer
+func (msh *Mesh) GetAccLayerHash(layerID types.LayerID) types.Hash32 {
+	h, err := msh.getRunningLayerHash(layerID)
+	if err != nil {
+		return types.Hash32{}
+	}
+	return h
+}
+
 type validator struct {
 	*Mesh
 	processedLayer types.LayerID
